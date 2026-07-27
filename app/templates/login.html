@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revi Atende · Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Hanken Grotesk', sans-serif;
+      background: #14100c;
+      color: #f0e6d8;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    .login-box {
+      background: #1a1410;
+      border: 1px solid #2e241c;
+      border-radius: 16px;
+      padding: 48px 40px;
+      width: 380px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+      position:relative;
+      overflow:hidden;
+    }
+    .login-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#e8601c,#d9a040);}
+    .login-logo { font-family: 'DM Serif Display', serif; font-size: 1.8rem; margin-bottom: 2px; color: #e8601c; }
+    .login-sub { color: #a09080; font-size: 0.8rem; margin-bottom: 32px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: #c8bfb0; }
+    input {
+      width: 100%; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid #2e241c; background: #14100c;
+      color: #f0e6d8; font-size: 0.95rem; margin-bottom: 18px;
+      outline: none; transition: border-color .2s;
+    }
+    input:focus { border-color: #e8601c; box-shadow: 0 0 0 3px rgba(232,96,28,.15); }
+    button {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #e8601c; color: #fff5e8; font-size: 1rem;
+      font-weight: 700; cursor: pointer; margin-top: 8px; transition: background .15s;
+    }
+    button:hover { background: #d4520a; }
+    .erro { color: #c0392b; font-size: 0.85rem; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="login-logo">Revi Atende</div>
+    <div class="login-sub">Painel de Atendimento</div>
+    {% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
+    <form method="post" action="/admin/login">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" name="email" required autofocus placeholder="seu@email.com">
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" name="senha" required placeholder="••••••••">
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!-- ============ CONFIGURAÇÃO ============ -->
+<div class="card drag-sec" id="config-card" data-sec="config">
+  <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Geral</span></div>
+  <form method="post" action="/admin/config" id="config-body">
+    <div class="row">
+      <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}" data-telefone inputmode="tel"></div>
+      <div><label>Fuso horário</label><input name="fuso" value="{{ config.fuso }}"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:10px;margin-top:18px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer;">
+      <input type="checkbox" name="avisar_dono" value="true" style="width:auto;margin:0;" {% if config.avisar_dono %}checked{% endif %}>
+      Avisar o dono no WhatsApp sobre agendamentos, reagendamentos e cancelamentos feitos pelo bot
+    </label>
+    <button class="btn-primary">Salvar configuração</button>
+  </form>
+</div>

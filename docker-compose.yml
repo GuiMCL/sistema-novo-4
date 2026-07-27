@@ -1,0 +1,161 @@
+# =============================================================================
+# Docker Compose — MyAutoAtend (agente de WhatsApp programático)
+# =============================================================================
+#
+# O QUE ESTE ARQUIVO FAZ:
+#   Sobe um ambiente completo com:
+#   - Evolution API    (gerenciamento de instâncias WhatsApp)
+#   - Redis            (cache da Evolution API)
+#   - PostgreSQL       (banco de dados da Evolution API)
+#   - MCP Agendamentos (agente de IA + ferramentas + painel /admin)
+#
+# CONFIGURAÇÃO:
+#   O .env tem só DUAS variáveis — LOGIN (e-mail) e SENHA — usadas no painel
+#   /admin e como apikey da Evolution. Defina ANTES do primeiro
+#   `docker compose up -d`. Chave de IA, telefone do dono e instruções do
+#   agente são configurados DEPOIS, pelo painel http://localhost:8000/admin.
+#
+# COMO USAR:
+#   1. cp .env.example .env  (e edite LOGIN e SENHA)
+#   2. docker compose up -d
+#   3. Abra http://localhost:8000/admin e siga o README
+#
+# =============================================================================
+
+services:
+  evolution-api:
+    container_name: evolution_api
+    image: evoapicloud/evolution-api:latest
+    restart: always
+    depends_on:
+      - redis
+      - evolution-postgres
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution-net
+    environment:
+      SERVER_NAME: evolution
+      SERVER_TYPE: http
+      SERVER_PORT: "9090"
+      SERVER_URL: http://localhost:9090
+      # Postgres é interno (sem porta no host) — credenciais constantes.
+      POSTGRES_DATABASE: evolution_api_db
+      POSTGRES_USERNAME: evolution
+      POSTGRES_PASSWORD: evolution_db_interno
+      CORS_ORIGIN: "*"
+      CORS_METHODS: GET,POST,PUT,DELETE
+      CORS_CREDENTIALS: "true"
+      LOG_LEVEL: ERROR,WARN,DEBUG,INFO,LOG,VERBOSE,DARK,WEBHOOKS,WEBSOCKET
+      LOG_COLOR: "true"
+      LOG_BAILEYS: error
+      EVENT_EMITTER_MAX_LISTENERS: "50"
+      DEL_INSTANCE: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution_db_interno@evolution-postgres:5432/evolution_api_db?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_exchange
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      DATABASE_SAVE_IS_ON_WHATSAPP: "true"
+      DATABASE_SAVE_IS_ON_WHATSAPP_DAYS: "7"
+      DATABASE_DELETE_MESSAGE: "true"
+      CONFIG_SESSION_PHONE_CLIENT: Evolution API
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#175197"
+      # Redis — sem autenticação
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_TTL: 604800s
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      # Chave de autenticação da API = SENHA única do stack
+      AUTHENTICATION_API_KEY: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
+    expose:
+      - "9090"
+
+  redis:
+    container_name: evolution_redis
+    image: redis:latest
+    restart: always
+    command: >
+      redis-server --port 6379 --appendonly yes
+    volumes:
+      - evolution_redis:/data
+    networks:
+      - evolution-net
+    expose:
+      - "6379"
+
+  evolution-postgres:
+    container_name: evolution_postgres
+    image: postgres:15
+    restart: always
+    command:
+      - postgres
+      - -c
+      - max_connections=1000
+      - -c
+      - listen_addresses=*
+    environment:
+      # Interno (sem porta no host) — mesmos valores usados pela Evolution.
+      POSTGRES_DB: evolution_api_db
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution_db_interno
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+    expose:
+      - "5432"
+
+  mcp-agendamentos:
+    container_name: mcp_agendamentos
+    build: ./myAutoAtendMCP
+    restart: unless-stopped
+    depends_on:
+      - evolution-api
+    # Painel /admin acessível só localmente. A Evolution entrega o webhook
+    # pela rede docker (http://mcp_agendamentos:8000).
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      MCP_DB_PATH: /data/agendamentos.db
+      MCP_TZ: America/Sao_Paulo
+      # Telefone do dono (autoriza ações restritas) — configure pelo painel
+      # /admin (Configuração geral) depois de subir; este é só o placeholder.
+      OWNER_PHONE: "5500000000000"
+      # Credenciais do painel /admin = LOGIN/SENHA únicos do stack.
+      ADMIN_USER: ${LOGIN:?Defina LOGIN e SENHA no .env (copie de .env.example)}
+      ADMIN_PASS: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
+      # Evolution API — pipeline do agente + pareamento pelo painel.
+      EVOLUTION_API_URL: http://evolution_api:9090
+      EVOLUTION_API_KEY: ${SENHA}
+      EVOLUTION_INSTANCE: evo_bot
+      # URL externa (browser do host) p/ atalho no painel.
+      EVOLUTION_EXTERNAL_URL: ${EVOLUTION_EXTERNAL_URL:-http://localhost:9090}
+    volumes:
+      - mcp_data:/data
+    networks:
+      - evolution-net
+    expose:
+      - "8000"
+
+volumes:
+  evolution_instances:
+  evolution_redis:
+  postgres_data:
+  mcp_data:
+
+networks:
+  evolution-net:
+    name: evolution-net
+    driver: bridge

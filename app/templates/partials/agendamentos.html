@@ -1,0 +1,118 @@
+<!-- ============ AGENDAMENTOS ============ -->
+<div class="card drag-sec" data-sec="agendamentos">
+  <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
+  {% if not apenas_ativos %}
+  <div class="ag-toolbar">
+    <button type="button" class="btn-primary btn-sm" id="ag-novo-abrir">+ Novo agendamento</button>
+  </div>
+  {% endif %}
+  <table class="tbl">
+    <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Veículo</th><th>Vaga</th><th>Quando</th><th></th></tr></thead>
+    <tbody>
+    {% for a in agendamentos %}
+      {% set vaga_nome = '' %}
+      {% for v in vagas %}{% if v.id == a.vaga_id %}{% set vaga_nome = v.nome %}{% endif %}{% endfor %}
+      <tr>
+        <td class="id">{{ a.id }}</td>
+        <td>
+          <div class="cli">
+            <div class="ava" data-num="{{ a.telefone_cliente }}">{{ (a.nome_cliente or '?')[:1]|upper }}</div>
+            <div><div class="who">{{ a.nome_cliente }}</div><div class="meta">{{ a.telefone_cliente }}</div></div>
+          </div>
+        </td>
+        <td>
+          {{ servico_nome.get(a.servico_id, '—') }}
+          {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
+        </td>
+        <td class="meta">
+          {% if a.veiculo %}{{ a.veiculo }}{% endif %}
+          {% if a.placa %}<br><strong>{{ a.placa }}</strong>{% endif %}
+        </td>
+        <td>{{ vaga_nome or '—' }}</td>
+        <td class="when-cell">
+          <span class="d">{{ a.inicio.split('T')[0] }}</span>
+          <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
+          {% if not apenas_ativos %}
+          <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar">
+            <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
+            <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança"><input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente</label>
+            <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>
+          <div class="acts">
+            <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
+            {% if not apenas_ativos %}
+            <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
+            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
+                  onsubmit="if(!confirm('Cancelar o agendamento de {{ a.nome_cliente }}?'))return false;this.avisar_cliente.value=confirm('Avisar {{ a.nome_cliente }} pelo WhatsApp? A IA manda a mensagem do cancelamento.')?'1':'';">
+              <input type="hidden" name="avisar_cliente" value="">
+              <button class="btn-sm btn-danger">Cancelar</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">Nenhum agendamento ativo no momento.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal "Novo agendamento": fora do card p/ sobreviver a ocultar/arrastar
+     (realocado pro body via JS, mesmo padrão do modal de conversas). -->
+<div class="agm-modal" id="agm-modal" role="dialog" aria-modal="true" aria-labelledby="agm-titulo">
+  <div class="agm-backdrop" data-fechar></div>
+  <div class="agm-card">
+    <header class="agm-head">
+      <h2 class="agm-titulo" id="agm-titulo">Novo agendamento</h2>
+      <button type="button" class="agm-x" id="agm-x" aria-label="Fechar">✕</button>
+    </header>
+    <form class="agm-body" id="agm-form" action="/admin/agendamento" data-nativo autocomplete="off">
+      <div class="row">
+        <div><label>Cliente</label><input name="nome_cliente" required placeholder="Nome"></div>
+        <div>
+          <label>Telefone (WhatsApp)</label>
+          <input name="telefone_cliente" required placeholder="+55 (45) 99999-9999" data-telefone inputmode="tel">
+        </div>
+      </div>
+      <div class="row">
+        <div><label>Serviço</label>
+          <select name="servico_id" id="agm-servico" required>
+            {% for s in servicos if s.ativo %}
+            <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
+            {% else %}
+            <option value="" disabled>Nenhum serviço ativo — cadastre no catálogo</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><label>Data</label><input id="agm-data" type="date" required></div>
+      </div>
+
+      <label>Horário</label>
+      <div class="agm-slots" id="agm-slots" aria-live="polite">
+        <p class="agm-slots-dica">Escolha o serviço e a data para ver os horários.</p>
+      </div>
+      <div class="agm-legenda" id="agm-legenda" hidden>
+        <span class="agm-leg-item"><span class="agm-leg-quad livre"></span>Livre</span>
+        <span class="agm-leg-item"><span class="agm-leg-quad ocupado"></span>Ocupado</span>
+      </div>
+      <input type="hidden" name="inicio" id="agm-inicio">
+
+      <div class="row">
+        <div><label>Veículo <span style="text-transform:none;font-weight:400">(opcional)</span></label><input name="veiculo" placeholder="Ex.: Fiat Uno"></div>
+        <div><label>Placa <span style="text-transform:none;font-weight:400">(opcional)</span></label><input name="placa" placeholder="ABC-1234" style="text-transform:uppercase"></div>
+      </div>
+
+      <label>Observações <span style="text-transform:none;font-weight:400">(opcional)</span></label>
+      <input name="observacoes" placeholder="Detalhes do cliente">
+
+      <div class="agm-acoes">
+        <button type="button" class="btn-ghost btn-sm" id="agm-cancelar">Cancelar</button>
+        <button type="submit" class="btn-primary btn-sm" id="agm-salvar">Agendar</button>
+      </div>
+    </form>
+  </div>
+</div>

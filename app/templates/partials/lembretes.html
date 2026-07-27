@@ -1,0 +1,58 @@
+<!-- ============ LEMBRETES ============ -->
+<div class="card drag-sec" data-sec="lembretes">
+  <div class="card-head"><span class="drag-grip">⠿</span><h2>Lembretes automaticos</h2><span class="pill {% if lembrete.ativo %}on{% else %}off{% endif %}">{% if lembrete.ativo %}Ativo{% else %}Inativo{% endif %}</span></div>
+  <form method="post" action="/admin/lembrete" style="padding:20px">
+    <div class="row">
+      <div>
+        <label>Ativar lembretes</label>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer">
+          <input type="checkbox" name="ativo" value="true" style="width:auto;margin:0" {% if lembrete.ativo %}checked{% endif %}>
+          Enviar lembretes automaticos
+        </label>
+      </div>
+    </div>
+
+    <h4 style="margin:16px 0 8px;font-size:14px">Primeiro aviso (DISPARO 1)</h4>
+    <div class="row">
+      <div>
+        <label>Enviar quantas horas antes?</label>
+        <input name="horas_antes" type="number" value="{{ lembrete.horas_antes }}" min="0" max="336" required>
+      </div>
+    </div>
+    <p class="meta" style="margin-top:8px"><strong>As mensagens sao geradas automaticamente pela IA</strong> com os dados do agendamento (nome, servico, data, hora). O tom e cordial e profissional, sem emojis.</p>
+    <input name="mensagem" type="hidden" value="">
+    <input name="mensagem2" type="hidden" value="">
+
+    <h4 style="margin:16px 0 8px;font-size:14px">Segundo aviso (DISPARO 2)</h4>
+    <div>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer;margin-bottom:8px">
+        <input type="checkbox" name="ativo2" value="true" style="width:auto;margin:0" {% if lembrete.ativo2 %}checked{% endif %}>
+        Ativar segundo aviso
+      </label>
+    </div>
+    <div class="row">
+      <div>
+        <label>Enviar quantas horas antes?</label>
+        <input name="horas_antes2" type="number" value="{{ lembrete.horas_antes2 }}" min="0" max="336" required>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer">
+          <input type="checkbox" name="confirmar_automatically" value="true" style="width:auto;margin:0" {% if lembrete.confirmar_automatically %}checked{% endif %}>
+          Confirmar automaticamente se responder "sim"
+        </label>
+      </div>
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer">
+          <input type="checkbox" name="cancelar_se_nao_confirmar" value="true" style="width:auto;margin:0" {% if lembrete.cancelar_se_nao_confirmar %}checked{% endif %}>
+          Cancelar se nao confirmar em
+        </label>
+        <input name="timeout_horas" type="number" value="{{ lembrete.timeout_horas }}" min="1" max="72" style="width:70px">
+        horas
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:16px">Salvar configuracao de lembretes</button>
+  </form>
+</div>

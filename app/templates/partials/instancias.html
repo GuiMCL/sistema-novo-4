@@ -1,0 +1,78 @@
+<!-- ============ INSTANCIAS WHATSAPP ============ -->
+<div class="card drag-sec" data-sec="instancias">
+  <div class="card-head"><span class="drag-grip">⠿</span><h2>Instancias WhatsApp</h2><span class="tag">{{ instancias|length }} ativas</span></div>
+  <p class="meta" style="padding:0 20px;margin:0 0 10px">Gerencie varios numeros de WhatsApp conectados simultaneamente. Cada instancia pode ser atribuida a um atendente. Clique em "QR Code" para parear e o status sera monitorado automaticamente.</p>
+  <table class="tbl">
+    <thead><tr><th>Nome</th><th>Numero</th><th>Atendente</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for i in instancias %}
+      <tr>
+        <td>{{ i.nome }}</td>
+        <td class="meta" id="inst-num-{{ i.id }}">{{ i.numero_fmt or i.numero or '—' }}</td>
+        <td class="meta">
+          {% set usr = usuarios|selectattr('id', 'equalto', i.usuario_id)|first %}
+          {{ usr.nome if usr else '—' }}
+        </td>
+        <td><span class="pill off" id="inst-status-{{ i.id }}">Verificando</span></td>
+        <td>
+          <details style="font-size:13px">
+            <summary style="cursor:pointer;color:var(--gold)">Gerenciar</summary>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+
+              <!-- Perfil (mostrado quando conectado) -->
+              <div id="inst-perfil-{{ i.id }}" style="display:none;align-items:center;gap:10px;padding:6px 8px;background:var(--bg2);border-radius:6px">
+                <div class="ava" id="inst-avatar-{{ i.id }}" style="width:36px;height:36px;font-size:16px;display:flex;align-items:center;justify-content:center">W</div>
+                <div>
+                  <div class="meta" id="inst-pnome-{{ i.id }}" style="font-weight:600"></div>
+                  <div class="meta" id="inst-pnum-{{ i.id }}" style="font-size:12px"></div>
+                </div>
+              </div>
+
+              <!-- QR Code area -->
+              <div id="inst-qr-area-{{ i.id }}" style="display:none;text-align:center;padding:6px 0">
+                <p class="meta" id="inst-qr-hint-{{ i.id }}" style="margin:0 0 4px">Aguardando QR Code...</p>
+                <img id="inst-qr-img-{{ i.id }}" style="display:none;width:200px;height:200px;border-radius:4px;background:var(--bg2)">
+                <div class="meta" id="inst-qr-code-{{ i.id }}" style="display:none;font-size:12px;margin-top:2px"></div>
+              </div>
+
+              <!-- Acoes -->
+              <div class="acts" style="gap:4px;flex-wrap:wrap">
+                <button class="btn-sm" onclick="instanciaQR({{ i.id }})" data-inst-id="{{ i.id }}">QR Code</button>
+                <button class="btn-sm btn-ghost" onclick="instanciaEstado({{ i.id }})">Estado</button>
+                <button class="btn-sm btn-danger" onclick="instanciaDesconectar({{ i.id }})" style="display:none" id="inst-logout-{{ i.id }}">Desconectar</button>
+              </div>
+
+              <!-- Editar -->
+              <form method="post" action="/admin/instancia/{{ i.id }}/editar" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">
+                <input name="numero" value="{{ i.numero }}" placeholder="Numero E.164" size="14">
+                <select name="usuario_id">
+                  <option value="0">Sem atendente</option>
+                  {% for u in usuarios %}
+                  <option value="{{ u.id }}" {% if u.id == i.usuario_id %}selected{% endif %}>{{ u.nome }}</option>
+                  {% endfor %}
+                </select>
+                <label style="font-size:12px"><input type="checkbox" name="ativo" value="true" {% if i.ativo %}checked{% endif %}> Ativa</label>
+                <button class="btn-sm">Salvar</button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nenhuma instancia criada.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/instancia" style="padding:12px 20px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px solid var(--border)">
+    <div><label>Nome da instancia</label><input name="nome" required placeholder="evo_bot_2"></div>
+    <div><label>Atendente (opcional)</label>
+      <select name="usuario_id">
+        <option value="0">Nenhum</option>
+        {% for u in usuarios %}
+        <option value="{{ u.id }}">{{ u.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn-primary btn-sm" style="margin-bottom:4px">+ Nova instancia</button>
+  </form>
+</div>

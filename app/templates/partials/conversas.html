@@ -1,0 +1,37 @@
+<!-- ============ CONVERSAS ============ -->
+<div class="card drag-sec" id="conversas-card" data-sec="conversas">
+  <div class="card-head" id="conversas-head">
+    <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
+    <h2>Conversas</h2>
+    <span class="conv-live" id="conversas-live" title="Atualiza sozinho"><span class="conv-live-dot"></span>ao vivo</span>
+    <span class="tag" id="conversas-count">—</span>
+    
+  </div>
+  <div id="conversas-body">
+    <p class="conv-sub">Tudo que passou pelo bot no WhatsApp. Abra uma conversa para ler o histórico, pausar o atendimento automático ou responder você mesmo.</p>
+    <div id="conversas-lista" class="conv-lista" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- Modal de conversa: fora do card p/ sobreviver a ocultar/arrastar. -->
+<div class="conv-modal" id="conv-modal" role="dialog" aria-modal="true" aria-labelledby="conv-modal-nome">
+  <div class="conv-modal-backdrop" data-fechar></div>
+  <div class="conv-modal-card">
+    <header class="conv-modal-head">
+      <div class="ava conv-modal-ava" id="conv-modal-ava">?</div>
+      <div class="conv-modal-id">
+        <div class="conv-modal-nome" id="conv-modal-nome">—</div>
+        <div class="conv-modal-tel meta" id="conv-modal-tel"></div>
+      </div>
+      <label class="conv-pausa-mod" title="Silencia o bot: as mensagens seguem sendo gravadas, mas ele para de responder e você assume a conversa.">
+        <input type="checkbox" id="conv-modal-pausa"> <span>Bot pausado</span>
+      </label>
+      <button type="button" class="conv-modal-x" id="conv-modal-x" aria-label="Fechar conversa">✕</button>
+    </header>
+    <div class="conv-msgs" id="conv-modal-msgs" aria-live="polite"></div>
+    <form class="conv-envio" id="conv-modal-form" data-nativo autocomplete="off">
+      <input type="text" id="conv-modal-input" placeholder="Escreva uma mensagem…" aria-label="Mensagem">
+      <button type="submit" class="btn-primary btn-sm" id="conv-modal-enviar">Enviar</button>
+    </form>
+  </div>
+</div>

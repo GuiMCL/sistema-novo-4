@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tema aplicado ANTES do primeiro paint (evita flash). Padrão: escuro. -->
+  <script>
+    (function(){
+      try{
+        var t = localStorage.getItem('tema');
+        if (t !== 'dark' && t !== 'light') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+    })();
+  </script>
+  <meta name="theme-color" content="#f3ece0">
+  <title>Revi Atende · Painel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/admin/vendor/gridstack.min.css">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=6">
+  <!-- Gridstack (vendor local, UMD): grade de cards com drag + resize. -->
+  <script src="/static/admin/vendor/gridstack-all.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="pole"></div>
+      <p class="eyebrow">Revi Atende · Painel de Controle</p>
+      <h1>Agenda &amp; <em>Serviços</em></h1>
+      <div class="acts" style="margin-top:6px">
+        <a href="/atendimento" class="btn-primary btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">💬 Atendimento</a>
+        <a href="/admin/logout" class="btn-ghost btn-sm" style="text-decoration:none">Sair</a>
+      </div>
+    </header>
+
+    {% include "partials/instancias.html" %}
+    {% include "partials/ia.html" %}
+    {% include "partials/prompt.html" %}
+    {% include "partials/agendamentos.html" %}
+    {% include "partials/vagas.html" %}
+    <!-- Conversas removidas: use /atendimento para o helpdesk completo -->
+    {% include "partials/proatividade.html" %}
+    {% include "partials/lembretes.html" %}
+    {% include "partials/catalogo.html" %}
+    {% include "partials/horarios.html" %}
+    {% include "partials/usuarios.html" %}
+    {% include "partials/config.html" %}
+  </div>
+
+  <!-- ============ ENGRENAGEM: gerenciar cards ============ -->
+  <button type="button" class="gear-fab" id="gear-fab" title="Gerenciar cards do painel" aria-label="Gerenciar cards do painel">⚙︎<span class="gear-badge" id="gear-badge" style="display:none">0</span></button>
+  <div class="gear-panel" id="gear-panel" role="dialog" aria-label="Cards do painel">
+    <h3>Cards do painel</h3>
+    <p class="gear-sub">Desligue para esconder um card da página; ligue para trazê-lo de volta.</p>
+    <div id="gear-lista"></div>
+    <div class="gear-row gear-pref" id="tema-row" role="switch" aria-checked="false" tabindex="0" title="Alternar entre tema claro e escuro">
+      <span class="gear-nome">Tema escuro</span><span class="sw"></span>
+    </div>
+  </div>
+
+  <!-- Ponte servidor → JS: único ponto onde Jinja injeta dados nos módulos. -->
+  <script>window.__ADMIN__ = { provedores: {{ provedores_ia | tojson }} };</script>
+  <script type="module" src="/static/admin/js/admin.js"></script>
+</body>
+</html>

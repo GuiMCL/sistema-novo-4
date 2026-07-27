@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    (function(){
+      try{
+        var t = localStorage.getItem('tema');
+        if (t !== 'dark' && t !== 'light') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+    })();
+  </script>
+  <meta name="theme-color" content="#f3ece0">
+  <title>Revi Atende · {% block title %}Painel{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=8">
+</head>
+<body>
+  <div class="admin-layout">
+    <nav class="admin-sidebar">
+      <div class="sb-brand">Revi Atende</div>
+      <div class="sb-tagline">Oficina Mecanica</div>
+      <div class="sb-user">
+        {{ request.session.usuario_nome or 'Usuario' }}
+        {% if request.session.usuario_papel != 'admin' %}
+        <span class="sb-papel">{{ request.session.usuario_papel }}</span>
+        {% endif %}
+      </div>
+      <ul class="sb-nav">
+        {% if request.session.usuario_papel == 'admin' %}
+        <li><a href="/admin" class="{% if active_page == 'dashboard' %}sb-active{% endif %}">Inicio</a></li>
+        <li><a href="/admin/agenda" class="{% if active_page == 'agenda' %}sb-active{% endif %}">Agenda</a></li>
+        <li><a href="/admin/servicos" class="{% if active_page == 'servicos' %}sb-active{% endif %}">Servicos</a></li>
+        <li><a href="/admin/config" class="{% if active_page == 'config' %}sb-active{% endif %}">Configuracoes</a></li>
+        <li><a href="/atendimento">Atendimento</a></li>
+        {% else %}
+        <li><a href="/atendimento" class="sb-ativo-link">Atendimento</a></li>
+        <li><a href="/admin/agenda?ativos=1" class="{% if active_page == 'agenda' %}sb-active{% endif %}">Agendamentos Ativos</a></li>
+        {% endif %}
+        <li><a href="/admin/logout">Sair</a></li>
+      </ul>
+    </nav>
+    <main class="admin-main">
+      <header class="admin-header">
+        <h1>{% block heading %}Painel{% endblock %}</h1>
+      </header>
+      <div class="admin-content">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <script>window.__ADMIN__ = { provedores: {{ provedores_ia | tojson }} };</script>
+  <script type="module" src="/static/admin/js/admin.js"></script>
+</body>
+</html>

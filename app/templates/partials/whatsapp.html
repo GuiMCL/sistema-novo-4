@@ -1,0 +1,30 @@
+<!-- ============ WHATSAPP ============ -->
+<div class="card drag-sec" id="wa-card" data-sec="wa">
+  <div class="card-head" id="wa-head">
+    <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
+    <h2>Conexão WhatsApp</h2>
+    <span class="pill off" id="wa-status">verificando…</span>
+    
+  </div>
+  <div class="wa-body" id="wa-body">
+    <div class="wa-qr-box">
+      <p class="wa-hint" id="wa-hint">Carregando estado da conexão…</p>
+      <img id="wa-qr" alt="QR Code do WhatsApp" style="display:none">
+      <div class="wa-code" id="wa-code" style="display:none"></div>
+    </div>
+    <div class="wa-side">
+      <div class="wa-perfil" id="wa-perfil" style="display:none">
+        <div class="ava" id="wa-perfil-ava">W</div>
+        <div class="wa-perfil-info">
+          <div class="wa-perfil-nome" id="wa-perfil-nome"></div>
+          <div class="meta" id="wa-perfil-num"></div>
+        </div>
+      </div>
+      <p class="meta" id="wa-msg">Gere o QR Code e escaneie em <b>Aparelhos conectados</b> no WhatsApp do número que vai atender.</p>
+      <div class="acts" style="justify-content:flex-start">
+        <button class="btn-primary" id="wa-connect" style="margin:0">Gerar QR Code</button>
+        <button class="btn-danger btn-sm" id="wa-logout" style="display:none">Desconectar</button>
+      </div>
+    </div>
+  </div>
+</div>
