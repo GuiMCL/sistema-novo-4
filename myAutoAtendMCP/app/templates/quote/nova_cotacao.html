@@ -1,0 +1,90 @@
+{% extends "quote/base.html" %}
+{% block title %}Nova Cotação{% endblock %}
+{% block heading %}Nova Solicitação de Cotação{% endblock %}
+{% block quote_js %}quote/cotacao.js{% endblock %}
+{% block quote_content %}
+<form id="form-cotacao" onsubmit="return enviarCotacao(event)">
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;">1. Categoria</h3>
+      <select id="cot-categoria" required onchange="carregarPecas()">
+        <option value="">Selecione a categoria</option>
+        {% for cat in categorias %}
+        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">2. Peças</h3>
+      <div id="cot-pecas-container">
+        <p class="empty">Selecione uma categoria primeiro</p>
+      </div>
+      <div id="cot-pecas-selecionadas" style="margin-top:12px;display:none;">
+        <label>Peças selecionadas:</label>
+        <ul id="cot-lista-pecas" style="list-style:none;padding:0;"></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">3. Observações</h3>
+      <textarea id="cot-observacoes" rows="3" placeholder="Observações adicionais para a cotação..."></textarea>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">4. Veículo (opcional)</h3>
+      <label>Placa</label>
+      <div style="display:flex;gap:8px;">
+        <input id="cot-placa" name="placa" maxlength="8"
+               placeholder="ABC-1234 ou ABC1D23" style="flex:1;text-transform:uppercase;"
+               oninput="formatarPlaca(this)">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="consultarPlaca()"
+                style="white-space:nowrap;" id="btn-consultar-placa">
+          Consultar
+        </button>
+      </div>
+      <div id="cot-veiculo-info" style="display:none;margin-top:10px;">
+        <div class="grid2" style="gap:8px;">
+          <div><label>Marca</label><input id="cot-veiculo-marca" readonly class="input-readonly"></div>
+          <div><label>Modelo</label><input id="cot-veiculo-modelo" readonly class="input-readonly"></div>
+          <div><label>Ano</label><input id="cot-veiculo-ano" readonly class="input-readonly"></div>
+        </div>
+        <p class="hf-sub" style="margin-top:8px;">Dados obtidos via <a href="https://app.apibrasil.io" target="_blank">APIBrasil</a></p>
+      </div>
+      <div id="cot-placa-erro" style="display:none;color:var(--red);font-size:13px;margin-top:6px;"></div>
+      <div id="cot-placa-loading" style="display:none;font-size:13px;color:var(--ink-soft);margin-top:6px;">Consultando...</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;">5. Fornecedores</h3>
+      <div id="cot-fornecedores-container">
+        <p class="empty">Selecione uma categoria para ver os fornecedores</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">6. Sessão WhatsApp</h3>
+      <select id="cot-sessao" required>
+        <option value="">Selecione uma sessão (obrigatório)</option>
+        {% for s in sessoes %}
+        <option value="{{ s.id }}">{{ s.nome }}</option>
+        {% endfor %}
+      </select>
+      <p class="hf-sub">Sessão do tipo Cotação usada para enviar as mensagens</p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">7. Template de Mensagem</h3>
+      <p class="hf-sub">Variáveis: <code>{fornecedor}</code> <code>{pecas}</code> <code>{categoria}</code> <code>{numero_cotacao}</code> <code>{placa}</code> <code>{veiculo}</code> <code>{marca}</code> <code>{modelo}</code> <code>{ano}</code></p>
+      <textarea id="cot-template" rows="8" style="font-family:'JetBrains Mono',monospace;font-size:13px;">{{ template.template }}</textarea>
+      <div style="margin-top:12px;">
+        <button type="submit" class="btn btn-primary" style="width:100%;">Enviar Cotação</button>
+      </div>
+    </div>
+  </div>
+</div>
+</form>
+{% endblock %}

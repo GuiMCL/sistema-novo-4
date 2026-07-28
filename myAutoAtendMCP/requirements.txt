@@ -1,0 +1,11 @@
+mcp[cli]
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+sqlmodel
+phonenumbers
+tzdata
+httpx
+pydantic-ai-slim[openai]>=1.0,<2
+itsdangerous

@@ -1,0 +1,121 @@
+<!-- ============ PROVEDORES DE IA ============ -->
+<div class="card drag-sec" id="ia-card" data-sec="ia">
+  <div class="card-head" id="ia-head">
+    <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
+    <h2>Provedores de IA</h2>
+    
+  </div>
+  <div id="ia-body">
+  <p class="ia-note" style="margin:-8px 0 16px">
+    As chaves são gravadas localmente e <b>nunca são exibidas de volta</b> — nem mascaradas.
+    Trocar chave ou modelo aplica na hora.
+  </p>
+
+  <div class="ia-tabs" role="tablist">
+    <button class="ia-tab active" data-ia-tab="texto" role="tab">💬 Texto <span class="dot" id="ia-dot-texto"></span></button>
+    <button class="ia-tab" data-ia-tab="audio" role="tab">🎙 Áudio <span class="dot" id="ia-dot-audio"></span></button>
+    <button class="ia-tab" data-ia-tab="imagem" role="tab">🖼 Imagem <span class="dot" id="ia-dot-imagem"></span></button>
+  </div>
+
+  <!-- ---- aba TEXTO ---- -->
+  <div class="ia-pane active" id="ia-pane-texto">
+    <p class="ia-note">Modelo LLM que conversa com o cliente.</p>
+
+    <div class="ia-resumo">
+      <span class="pill off" id="ia-status-texto">…</span>
+      <span class="ia-prov-atual" id="ia-atual-texto">carregando…</span>
+      <button class="btn-ghost btn-sm" data-ia-editar="texto">Atualizar chave</button>
+    </div>
+
+    <div class="ia-chave" id="ia-chave-texto" hidden>
+      <label>Provedor</label>
+      <select id="ia-prov-texto"></select>
+      <div id="ia-url-wrap-texto" style="display:none">
+        <label>Base URL (compatível OpenAI)</label>
+        <input id="ia-url-texto" placeholder="https://meu-provedor/v1">
+      </div>
+      <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+      <input type="password" id="ia-key-texto" autocomplete="new-password" placeholder="cole a nova chave">
+      <div class="ia-acts">
+        <button class="btn-primary btn-sm" style="margin:0" data-ia-key="texto">Salvar chave</button>
+        <button class="btn-ghost btn-sm" data-ia-cancelar="texto">Cancelar</button>
+      </div>
+    </div>
+
+    <label>Modelo</label>
+    <input id="ia-busca-texto" class="ia-busca" placeholder="🔎 Pesquisar modelo…" autocomplete="off" style="display:none">
+    <select id="ia-modelo-sel-texto" style="display:none"></select>
+    <input id="ia-modelo-texto" placeholder="ex.: gpt-5.1">
+    <div class="ia-acts">
+      <button class="btn-ghost btn-sm" data-ia-modelo="texto">Salvar modelo</button>
+    </div>
+    <p class="ia-msg" id="ia-msg-texto"></p>
+  </div>
+
+  <!-- ---- aba ÁUDIO ---- -->
+  <div class="ia-pane" id="ia-pane-audio">
+    <div class="ia-subtabs">
+      <button class="ia-subtab active">Transcrever</button>
+      <button class="ia-subtab" disabled title="Em breve">Enviar áudio <span class="soon">em breve</span></button>
+    </div>
+    <p class="ia-note">Transcrição das mensagens de voz. Usa <code>whisper-1</code> (formato OpenAI) — por isso só OpenAI ou URL própria compatível.</p>
+
+    <div class="ia-resumo">
+      <span class="pill off" id="ia-status-audio">…</span>
+      <span class="ia-prov-atual" id="ia-atual-audio">carregando…</span>
+      <button class="btn-ghost btn-sm" data-ia-editar="audio">Atualizar chave</button>
+    </div>
+
+    <div class="ia-chave" id="ia-chave-audio" hidden>
+      <label>Provedor</label>
+      <select id="ia-prov-audio"></select>
+      <div id="ia-url-wrap-audio" style="display:none">
+        <label>Base URL (compatível OpenAI)</label>
+        <input id="ia-url-audio" placeholder="https://meu-provedor/v1">
+      </div>
+      <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+      <input type="password" id="ia-key-audio" autocomplete="new-password" placeholder="cole a nova chave">
+      <div class="ia-acts">
+        <button class="btn-primary btn-sm" style="margin:0" data-ia-key="audio">Salvar chave</button>
+        <button class="btn-ghost btn-sm" data-ia-cancelar="audio">Cancelar</button>
+      </div>
+    </div>
+    <p class="ia-msg" id="ia-msg-audio"></p>
+  </div>
+
+  <!-- ---- aba IMAGEM ---- -->
+  <div class="ia-pane" id="ia-pane-imagem">
+    <p class="ia-note">Visão / OCR das imagens recebidas. Qualquer provedor com modelo de visão serve.</p>
+
+    <div class="ia-resumo">
+      <span class="pill off" id="ia-status-imagem">…</span>
+      <span class="ia-prov-atual" id="ia-atual-imagem">carregando…</span>
+      <button class="btn-ghost btn-sm" data-ia-editar="imagem">Atualizar chave</button>
+    </div>
+
+    <div class="ia-chave" id="ia-chave-imagem" hidden>
+      <label>Provedor</label>
+      <select id="ia-prov-imagem"></select>
+      <div id="ia-url-wrap-imagem" style="display:none">
+        <label>Base URL (compatível OpenAI)</label>
+        <input id="ia-url-imagem" placeholder="https://meu-provedor/v1">
+      </div>
+      <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+      <input type="password" id="ia-key-imagem" autocomplete="new-password" placeholder="cole a nova chave">
+      <div class="ia-acts">
+        <button class="btn-primary btn-sm" style="margin:0" data-ia-key="imagem">Salvar chave</button>
+        <button class="btn-ghost btn-sm" data-ia-cancelar="imagem">Cancelar</button>
+      </div>
+    </div>
+
+    <label>Modelo de visão (OCR)</label>
+    <input id="ia-busca-imagem" class="ia-busca" placeholder="🔎 Pesquisar modelo…" autocomplete="off" style="display:none">
+    <select id="ia-modelo-sel-imagem" style="display:none"></select>
+    <input id="ia-modelo-imagem" placeholder="ex.: gpt-4o">
+    <div class="ia-acts">
+      <button class="btn-ghost btn-sm" data-ia-modelo="imagem">Salvar modelo</button>
+    </div>
+    <p class="ia-msg" id="ia-msg-imagem"></p>
+  </div>
+  </div>
+</div>

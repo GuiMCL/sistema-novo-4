@@ -1,0 +1,36 @@
+{% extends "admin_base.html" %}
+{% block content %}
+<div class="admin-layout">
+  <nav class="admin-sidebar">
+    <div class="sb-brand">Central de Cotações</div>
+    <div class="sb-tagline">Gestão de Fornecedores</div>
+    <div class="sb-user">
+      {{ request.session.usuario_nome or 'Usuario' }}
+      {% if request.session.usuario_papel != 'admin' %}
+      <span class="sb-papel">{{ request.session.usuario_papel }}</span>
+      {% endif %}
+    </div>
+    <ul class="sb-nav">
+      <li><a href="/admin/quote/dashboard" class="{% if active_page == 'quote-dashboard' %}sb-active{% endif %}">Dashboard</a></li>
+      <li><a href="/admin/quote/categorias" class="{% if active_page == 'quote-categorias' %}sb-active{% endif %}">Categorias</a></li>
+      <li><a href="/admin/quote/pecas" class="{% if active_page == 'quote-pecas' %}sb-active{% endif %}">Peças</a></li>
+      <li><a href="/admin/quote/fornecedores" class="{% if active_page == 'quote-fornecedores' %}sb-active{% endif %}">Fornecedores</a></li>
+      <li><a href="/admin/quote/contatos" class="{% if active_page == 'quote-contatos' %}sb-active{% endif %}">Contatos</a></li>
+      <li><a href="/admin/quote/sessoes" class="{% if active_page == 'quote-sessoes' %}sb-active{% endif %}">Sessões WhatsApp</a></li>
+      <li><a href="/admin/quote/nova" class="{% if active_page == 'quote-nova' %}sb-active{% endif %}">Nova Cotação</a></li>
+      <li><a href="/admin/quote/historico" class="{% if active_page == 'quote-historico' %}sb-active{% endif %}">Histórico</a></li>
+      <li><a href="/admin/quote/configuracoes" class="{% if active_page == 'quote-config' %}sb-active{% endif %}">Configurações</a></li>
+      <li style="margin-top:auto;border-top:1px solid var(--line);padding-top:8px;"><a href="/admin">← Voltar ao Painel</a></li>
+    </ul>
+  </nav>
+  <main class="admin-main">
+    <header class="admin-header">
+      <h1>{% block heading %}Central de Cotações{% endblock %}</h1>
+    </header>
+    <div class="admin-content">
+      {% block quote_content %}{% endblock %}
+    </div>
+  </main>
+</div>
+<script type="module" src="/static/admin/js/{% block quote_js %}{% endblock %}"></script>
+{% endblock %}

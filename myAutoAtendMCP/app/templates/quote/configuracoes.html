@@ -1,0 +1,69 @@
+{% extends "quote/base.html" %}
+{% block title %}Configurações{% endblock %}
+{% block heading %}Configurações de Cotação{% endblock %}
+{% block quote_js %}quote/config.js{% endblock %}
+{% block quote_content %}
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;">Template de Mensagem</h3>
+      <p class="hf-sub">Variáveis disponíveis: <code>{fornecedor}</code> <code>{fornecedor_empresa}</code> <code>{pecas}</code> <code>{categoria}</code> <code>{numero_cotacao}</code> <code>{observacoes}</code> <code>{data}</code> <code>{placa}</code> <code>{veiculo}</code> <code>{marca}</code> <code>{modelo}</code> <code>{ano}</code></p>
+      <form id="form-template" onsubmit="return salvarTemplate(event)">
+        <input type="hidden" name="template_id" id="tmpl-id" value="{{ template.id }}">
+        <label>Nome do Template</label>
+        <input name="nome" id="tmpl-nome" value="{{ template.nome }}">
+        <label>Template</label>
+        <textarea name="template" id="tmpl-template" rows="10" style="font-family:'JetBrains Mono',monospace;font-size:13px;">{{ template.template }}</textarea>
+        <label class="avisar-cli" style="margin-top:14px;">
+          <input type="checkbox" name="ativo" id="tmpl-ativo" {% if template.ativo %}checked{% endif %}> Template Ativo
+        </label>
+        <div class="agm-acoes">
+          <button type="submit" class="btn btn-primary">Salvar Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;">Templates Salvos</h3>
+      <div id="tmpl-lista">
+        {% for t in templates %}
+        <div class="proat-item" data-id="{{ t.id }}">
+          <div class="proat-rail" style="background:{% if t.ativo %}var(--green){% else %}var(--ink-soft){% endif %};"></div>
+          <div class="proat-body">
+            <div class="proat-top">
+              <span class="proat-titulo">{{ t.nome }}</span>
+              {% if t.ativo %}<span class="pill on">Ativo</span>{% endif %}
+            </div>
+            <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;white-space:pre-wrap;max-height:60px;overflow:hidden;">{{ t.template[:120] }}…</div>
+            <div style="margin-top:6px;">
+              <button class="btn btn-sm btn-ghost" onclick="carregarTemplate({{ t.id }})">Carregar</button>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="empty">Nenhum template salvo</p>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">API Consulta Placa</h3>
+      <p class="hf-sub">Configure as credenciais da <a href="https://app.apibrasil.io" target="_blank">APIBrasil</a> para consulta automática de placas veiculares.</p>
+      <form id="form-placa-config" onsubmit="return salvarPlacaConfig(event)">
+        <label>Bearer Token</label>
+        <input type="password" name="token" id="placa-token" value="{{ config.quote_placa_token if config else '' }}" autocomplete="off">
+        <label>Device Token</label>
+        <input type="password" name="device_token" id="placa-device-token" value="{{ config.quote_placa_device_token if config else '' }}" autocomplete="off">
+        <div class="agm-acoes">
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+      <p class="hf-sub" style="margin-top:12px;">Obtenha seus tokens em <a href="https://app.apibrasil.io" target="_blank">app.apibrasil.io</a> → API Placa Dados. Plano gratuito: 100 consultas/dia.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Informações</h3>
+      <p class="hf-sub">A Central de Cotações é um módulo independente do Atendimento. As sessões WhatsApp do tipo "cotação" são exclusivas para comunicação com fornecedores e não se misturam com as sessões de atendimento ao cliente.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

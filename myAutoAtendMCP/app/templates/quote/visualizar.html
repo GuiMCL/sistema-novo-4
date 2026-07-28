@@ -1,0 +1,66 @@
+{% extends "quote/base.html" %}
+{% block title %}Cotação {{ req.numero }}{% endblock %}
+{% block heading %}Cotação {{ req.numero }}{% endblock %}
+{% block quote_js %}quote/historico.js{% endblock %}
+{% block quote_content %}
+<div id="cotacao-detalhe" data-id="{{ req.id }}" style="display:grid;grid-template-columns:1.4fr 1fr;gap:22px;align-items:start;">
+  <div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;">Informações</h3>
+        <span id="cot-status-badge" class="pill">{{ req.status }}</span>
+      </div>
+      <table style="width:100%;font-size:14px;">
+        <tr><td style="padding:6px 0;color:var(--ink-soft);width:120px;">Número</td><td style="padding:6px 0;font-weight:600;">{{ req.numero }}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-soft);">Categoria</td><td style="padding:6px 0;">{{ req.categoria_nome if req.categoria_nome is defined else '' }}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-soft);">Data</td><td style="padding:6px 0;">{{ req.criado_em[:16] if req.criado_em else '' }}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-soft);">Observações</td><td style="padding:6px 0;">{{ req.observacoes }}</td></tr>
+        {% if req.placa %}
+        <tr><td style="padding:6px 0;color:var(--ink-soft);">Placa</td><td style="padding:6px 0;font-weight:600;">{{ req.placa }}</td></tr>
+        {% endif %}
+        {% if req.veiculo_marca or req.veiculo_modelo %}
+        <tr><td style="padding:6px 0;color:var(--ink-soft);">Veículo</td>
+          <td style="padding:6px 0;">{{ req.veiculo_marca }} {{ req.veiculo_modelo }} {{ req.veiculo_ano }}</td></tr>
+        {% endif %}
+      </table>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" onclick="alterarStatus({{ req.id }}, 'finalizada')">Finalizar</button>
+        <button class="btn btn-sm btn-danger" onclick="alterarStatus({{ req.id }}, 'cancelada')">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-comparativo" style="overflow-x:auto;">
+      <h3 style="margin-top:0;">Comparativo de Preços</h3>
+      <div id="comparativo-container">
+        <p class="empty">Carregando...</p>
+      </div>
+      <button class="btn btn-primary btn-sm" id="btn-salvar-precos" style="margin-top:12px;display:none;" onclick="salvarPrecos({{ req.id }})">Salvar Preços</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Peças</h3>
+      <table class="tbl" id="cot-itens-tbl">
+        <thead><tr><th>Peça</th><th>Código</th><th>Qtd</th></tr></thead>
+        <tbody id="cot-itens-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Mensagens</h3>
+      <div id="cot-mensagens" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;">Fornecedores</h3>
+      <div id="cot-fornecedores-list"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Histórico</h3>
+      <div id="cot-historico" style="display:flex;flex-direction:column;gap:6px;font-size:13px;"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "quote/base.html" %}
+{% block title %}Fornecedores{% endblock %}
+{% block heading %}Fornecedores{% endblock %}
+{% block quote_js %}quote/fornecedores.js{% endblock %}
+{% block quote_content %}
+<div style="margin-bottom:18px;">
+  <button class="btn btn-primary btn-sm" onclick="abrirModalFornecedor()">+ Novo Fornecedor</button>
+</div>
+<div class="card">
+  <table class="tbl" id="tbl-fornecedores">
+    <thead><tr><th>Nome</th><th>Empresa</th><th>WhatsApp</th><th>Categorias</th><th>Status</th><th class="acts">Ações</th></tr></thead>
+    <tbody>
+      {% for f in fornecedores %}
+      <tr data-id="{{ f.id }}">
+        <td class="who">{{ f.nome }}</td>
+        <td>{{ f.empresa }}</td>
+        <td class="meta">{{ f.whatsapp }}</td>
+        <td style="max-width:200px;">
+          {% set cats = f.categorias if f.categorias is defined else [] %}
+          {% for c in (f.categorias if f.categorias is defined else []) %}
+          <span class="pill" style="background:var(--paper-2);margin:2px;">{{ c.nome }}</span>
+          {% endfor %}
+        </td>
+        <td>{% if f.ativo %}<span class="pill on">Ativo</span>{% else %}<span class="pill off">Inativo</span>{% endif %}</td>
+        <td class="acts">
+          <button class="btn btn-sm btn-ghost" onclick="editarFornecedor({{ f.id }})">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="excluirFornecedor({{ f.id }})">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">Nenhum fornecedor cadastrado</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="agm-modal" id="modal-fornecedor">
+  <div class="agm-backdrop" onclick="fecharModalFornecedor()"></div>
+  <div class="agm-card" style="max-width:640px;">
+    <div class="agm-head">
+      <h2 class="agm-titulo" id="modal-fornecedor-titulo">Novo Fornecedor</h2>
+      <button class="agm-x" onclick="fecharModalFornecedor()">✕</button>
+    </div>
+    <div class="agm-body">
+      <form id="form-fornecedor" onsubmit="return salvarFornecedor(event)">
+        <input type="hidden" name="fornecedor_id" id="forn-id" value="0">
+        <div class="row">
+          <div><label>Nome *</label><input name="nome" id="forn-nome" required></div>
+          <div><label>Empresa</label><input name="empresa" id="forn-empresa"></div>
+        </div>
+        <div class="row">
+          <div><label>WhatsApp</label><input name="whatsapp" id="forn-whatsapp" class="telefone" data-telefone></div>
+          <div><label>Telefone</label><input name="telefone" id="forn-telefone" class="telefone"></div>
+        </div>
+        <div class="row">
+          <div><label>Email</label><input name="email" id="forn-email" type="email"></div>
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;"><label>Cidade</label><input name="cidade" id="forn-cidade"></div>
+            <div style="flex:0 0 80px;"><label>UF</label><input name="estado" id="forn-estado" maxlength="2" style="text-transform:uppercase;"></div>
+          </div>
+        </div>
+        <label>Categorias Atendidas</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;" id="forn-categorias-container">
+          {% for cat in categorias %}
+          <label class="avisar-cli" style="gap:4px;">
+            <input type="checkbox" value="{{ cat.id }}" class="forn-cat-check"> {{ cat.nome }}
+          </label>
+          {% endfor %}
+        </div>
+        <label>Observações</label>
+        <textarea name="observacoes" id="forn-observacoes" rows="2"></textarea>
+        <label class="avisar-cli" style="margin-top:14px;">
+          <input type="checkbox" name="ativo" id="forn-ativo" checked> Ativo
+        </label>
+        <div class="agm-acoes">
+          <button type="button" class="btn btn-ghost" onclick="fecharModalFornecedor()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

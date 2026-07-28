@@ -1,0 +1,49 @@
+{% extends "quote/base.html" %}
+{% block title %}Histórico{% endblock %}
+{% block heading %}Histórico de Cotações{% endblock %}
+{% block quote_js %}quote/historico.js{% endblock %}
+{% block quote_content %}
+<div style="margin-bottom:18px;display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+  <div style="min-width:200px;">
+    <label>Filtrar por Status</label>
+    <select id="filtro-status" onchange="filtrarStatus()">
+      <option value="">Todos</option>
+      <option value="aberta" {% if status_filtro == 'aberta' %}selected{% endif %}>Aberta</option>
+      <option value="enviada" {% if status_filtro == 'enviada' %}selected{% endif %}>Enviada</option>
+      <option value="aguardando" {% if status_filtro == 'aguardando' %}selected{% endif %}>Aguardando</option>
+      <option value="respondida_parcial" {% if status_filtro == 'respondida_parcial' %}selected{% endif %}>Respondida Parcial</option>
+      <option value="respondida" {% if status_filtro == 'respondida' %}selected{% endif %}>Respondida</option>
+      <option value="finalizada" {% if status_filtro == 'finalizada' %}selected{% endif %}>Finalizada</option>
+      <option value="cancelada" {% if status_filtro == 'cancelada' %}selected{% endif %}>Cancelada</option>
+    </select>
+  </div>
+</div>
+<div class="card">
+  <table class="tbl" id="tbl-historico">
+    <thead><tr><th>#</th><th>Número</th><th>Categoria</th><th>Usuário</th><th>Status</th><th>Data</th><th class="acts">Ações</th></tr></thead>
+    <tbody>
+      {% for r in requests %}
+      <tr data-id="{{ r.id }}">
+        <td class="id">{{ r.id }}</td>
+        <td class="who">{{ r.numero }}</td>
+        <td>{{ r.categoria_nome }}</td>
+        <td class="meta">{{ r.usuario_nome }}</td>
+        <td>
+          {% set status_map = {'aberta':'Aberta','enviada':'Enviada','aguardando':'Aguardando','respondida_parcial':'Resp. Parcial','respondida':'Respondida','finalizada':'Finalizada','cancelada':'Cancelada'} %}
+          <span class="pill {% if r.status in ('aberta','enviada') %}on{% elif r.status == 'cancelada' %}off{% else %}on{% endif %}">{{ status_map.get(r.status, r.status) }}</span>
+        </td>
+        <td class="meta">{{ (r.criado_em or '')[:16] }}</td>
+        <td class="acts">
+          <a href="/admin/quote/{{ r.id }}" class="btn btn-sm btn-ghost">Ver</a>
+          {% if r.status not in ('finalizada','cancelada') %}
+          <button class="btn btn-sm btn-danger" onclick="cancelarCotacao({{ r.id }})">Cancelar</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">Nenhuma cotação encontrada</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

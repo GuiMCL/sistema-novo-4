@@ -1,0 +1,44 @@
+<!-- ============ INSTRUÇÕES DO AGENTE ============ -->
+<div class="card drag-sec" id="prompt-card" data-sec="prompt">
+  <div class="card-head" id="prompt-head">
+    <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
+    <h2>Instruções do Agente</h2>
+    <span class="pill off" id="prompt-status">…</span>
+    
+  </div>
+  <div id="prompt-body">
+    <p class="ia-note" style="margin:-8px 0 18px">
+      Personalidade e regras do atendente. Salvar <b>aplica na hora</b> —
+      a data/hora atual continua sendo injetada automaticamente no início.
+    </p>
+    <label>Instrução geral</label>
+    <textarea id="prompt-geral" placeholder="Carregando…"></textarea>
+
+    <details class="prompt-avancado" id="prompt-avancado">
+      <summary>⚙ Instruções do MCP (avançado)</summary>
+      <p class="prompt-aviso">
+        <b>Não recomendado alterar.</b> Estes blocos ensinam o agente a usar as ferramentas de
+        agendamento (MCP) e a formatação das mensagens (divisão em bolhas de WhatsApp).
+        São dois: o do <b>dono</b> (todas as ferramentas, inclusive gestão) e o do <b>cliente</b>
+        (sem as ações restritas ao dono). Mudanças aqui podem fazer o agente parar de consultar
+        horários, agendar errado ou mandar mensagens quebradas. Se algo der errado, use
+        <i>Restaurar padrão</i>.
+      </p>
+      <label>Bloco MCP — dono (todas as ferramentas)</label>
+      <textarea id="prompt-mcp-dono"></textarea>
+      <div class="ia-acts">
+        <button class="btn-ghost btn-sm" id="prompt-restaurar-dono">Restaurar padrão</button>
+      </div>
+      <label>Bloco MCP — cliente (sem ações do dono)</label>
+      <textarea id="prompt-mcp-cliente"></textarea>
+      <div class="ia-acts">
+        <button class="btn-ghost btn-sm" id="prompt-restaurar-cliente">Restaurar padrão</button>
+      </div>
+    </details>
+
+    <div class="ia-acts">
+      <button class="btn-primary btn-sm" style="margin:0" id="prompt-salvar">Salvar</button>
+    </div>
+    <p class="ia-msg" id="prompt-msg"></p>
+  </div>
+</div>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <script>(function(){
+    try{ var t = localStorage.getItem('tema'); if (t !== 'dark' && t !== 'light') t = 'dark'; document.documentElement.setAttribute('data-theme', t); }
+    catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+  })();</script>
+  <title>Revi Atende · Atendimento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=8">
+  <link rel="stylesheet" href="/static/admin/css/atendimento.css?v=3">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sb-header">
+        <h2>Revi Atende</h2>
+        <div class="sb-user">
+          {{ request.session.usuario_nome or 'Usuario' }}
+          {% if request.session.usuario_papel != 'admin' %}
+          <span class="sb-papel">{{ request.session.usuario_papel }}</span>
+          {% endif %}
+        </div>
+        {% if request.session.usuario_papel == 'admin' %}
+        <a href="/admin" class="sb-link" title="Painel Admin">&#9881;</a>
+        {% endif %}
+        <a href="/admin/logout" class="sb-link" title="Sair">&#x23FB;</a>
+      </div>
+      <div class="sb-search">
+        <input type="text" id="conv-busca" placeholder="Buscar conversa..." oninput="atendimento.buscar()">
+      </div>
+      <div class="sb-filtros">
+        <button class="filtro ativo" data-filtro="todas" onclick="atendimento.filtrar('todas', this)">Todas</button>
+        <button class="filtro" data-filtro="minhas" onclick="atendimento.filtrar('minhas', this)">Suas</button>
+        <button class="filtro" data-filtro="pendentes" onclick="atendimento.filtrar('pendentes', this)">Pendentes</button>
+      </div>
+      <div class="sb-lista" id="conv-lista">
+        <div class="conv-placeholder">Carregando conversas...</div>
+      </div>
+    </aside>
+
+    <!-- Chat -->
+    <main id="chat">
+      <div id="chat-placeholder" class="chat-placeholder">
+        <div class="placeholder-icon">&#128172;</div>
+        <h3>Selecione uma conversa</h3>
+        <p>Escolha um contato na lista ao lado.</p>
+      </div>
+
+      <div id="chat-ativo" style="display:none">
+        <div id="chat-head" class="chat-head">
+          <button id="mobile-toggle" onclick="atendimento.toggleSidebar()" title="Conversas">&#9776;</button>
+          <div class="ch-user">
+            <div class="ch-avatar" id="ch-avatar">?</div>
+            <div>
+              <div class="ch-nome" id="ch-nome">Carregando...</div>
+              <div class="ch-status" id="ch-status">offline</div>
+            </div>
+          </div>
+          <div class="ch-actions">
+            <button class="ch-btn" id="ch-pause-btn" onclick="atendimento.togglePausa()" title="Pausar bot">&#x23F8;</button>
+            <button class="ch-btn" onclick="atendimento.togglePanel()" title="Informacoes">&#x2139;</button>
+            <button class="ch-btn" onclick="atendimento.recarregarConversa()" title="Recarregar">&#x21BB;</button>
+          </div>
+        </div>
+
+        <div id="chat-msgs" class="chat-msgs">
+          <div class="msg-placeholder">Nenhuma mensagem ainda.</div>
+        </div>
+
+        <div class="chat-input" id="chat-input-area">
+          <textarea id="chat-texto" rows="1" placeholder="Digite sua mensagem..." onkeydown="atendimento.onEnter(event)"></textarea>
+          <button id="chat-enviar" onclick="atendimento.enviar()" title="Enviar (Enter)">&#x27A4;</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Panel direito -->
+    <aside id="panel">
+      <div id="panel-placeholder" class="panel-placeholder">
+        <p>Selecione um contato</p>
+      </div>
+
+      <div id="panel-conteudo" style="display:none">
+        <div class="panel-section">
+          <h4>Cliente</h4>
+          <div class="panel-field"><label>Nome</label><span id="p-nome">--</span></div>
+          <div class="panel-field"><label>Telefone</label><span id="p-telefone">--</span></div>
+          <div class="panel-field"><label>Status</label><span id="p-status">--</span></div>
+        </div>
+
+        <div class="panel-section" id="p-agendamentos-section">
+          <h4>Agendamentos</h4>
+          <div id="p-agendamentos">Nenhum agendamento.</div>
+          <button class="btn-sm btn-outline" onclick="atendimento.novoAgendamento()" style="margin-top:6px">+ Novo</button>
+        </div>
+
+        <div class="panel-section">
+          <h4>Acoes</h4>
+          <button class="btn-sm" onclick="atendimento.enviarConfirmacao()" style="margin-bottom:4px">Enviar confirmacao</button>
+          <button class="btn-sm btn-danger" onclick="atendimento.pausarContato()">Pausar bot</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Modal Novo Agendamento -->
+  <div class="modal-overlay" id="modal-agenda" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box">
+      <h3>Novo agendamento</h3>
+      <form id="form-agenda" onsubmit="return atendimento.criarAgendamento(event)">
+        <label>Servico</label>
+        <select name="servico_id" required>
+          {% for s in servicos %}<option value="{{ s.id }}">{{ s.nome }} (R$ {{ "%.2f"|format(s.valor) }})</option>{% endfor %}
+        </select>
+        <label>Cliente</label>
+        <input type="text" name="nome_cliente" id="ag-nome" required>
+        <label>Telefone</label>
+        <input type="text" name="telefone_cliente" id="ag-telefone" required>
+        <label>Data e horario</label>
+        <input type="datetime-local" name="inicio" required>
+        <label>Veiculo</label>
+        <input type="text" name="veiculo" placeholder="Ex.: Fiat Uno">
+        <label>Placa</label>
+        <input type="text" name="placa" placeholder="ABC-1234" style="text-transform:uppercase">
+        <label>Observacoes</label>
+        <textarea name="observacoes" rows="2"></textarea>
+        <div class="form-acts">
+          <button type="button" onclick="document.getElementById('modal-agenda').style.display='none'">Cancelar</button>
+          <button type="submit">Agendar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>window.__ATENDIMENTO__ = { usuario: { id: {{ request.session.usuario_id or 0 }}, nome: '{{ request.session.usuario_nome or "" }}' } };</script>
+  <script type="module" src="/static/admin/js/atendimento.js"></script>
+</body>
+</html>

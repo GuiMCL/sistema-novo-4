@@ -1,0 +1,57 @@
+<!-- ============ USUÁRIOS ============ -->
+<div class="card drag-sec" data-sec="usuarios">
+  <div class="card-head"><span class="drag-grip">⠿</span><h2>Usuários</h2><span class="tag">{{ usuarios|length }} cadastrados</span></div>
+  <p class="meta" style="padding:0 20px;margin:0 0 10px">Atendentes, mecânicos e administradores do sistema. Cada um pode ter seu próprio login.</p>
+  <table class="tbl">
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Telefone</th><th>Ativo</th><th></th></tr></thead>
+    <tbody>
+    {% for u in usuarios %}
+      <tr>
+        <td>{{ u.nome }}</td>
+        <td>{{ u.email }}</td>
+        <td><span class="pill {% if u.papel=='admin'%}on{% else %}off{% endif %}">{{ u.papel }}</span></td>
+        <td class="meta">{{ u.telefone }}</td>
+        <td>{% if u.ativo %}✅{% else %}❌{% endif %}</td>
+        <td>
+          <details style="font-size:13px">
+            <summary style="cursor:pointer;color:var(--gold)">Editar</summary>
+            <form method="post" action="/admin/usuario/{{ u.id }}/editar" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+              <div class="row" style="gap:4px">
+                <input name="nome" value="{{ u.nome }}" required size="12">
+                <select name="papel">
+                  <option value="admin" {% if u.papel=='admin'%}selected{% endif %}>Admin</option>
+                  <option value="atendente" {% if u.papel=='atendente'%}selected{% endif %}>Atendente</option>
+                  <option value="mecanico" {% if u.papel=='mecanico'%}selected{% endif %}>Mecânico</option>
+                </select>
+              </div>
+              <input name="telefone" value="{{ u.telefone }}" placeholder="Telefone">
+              <label style="font-size:12px"><input type="checkbox" name="ativo" value="true" {% if u.ativo %}checked{% endif %}> Ativo</label>
+              <button class="btn-sm">Salvar</button>
+            </form>
+            <form method="post" action="/admin/usuario/{{ u.id }}/resetar-senha" style="display:flex;gap:4px;margin-top:4px" onsubmit="return confirm('Resetar senha de {{ u.nome }}?')">
+              <input type="password" name="senha" placeholder="Nova senha" required size="10">
+              <button class="btn-sm">Resetar senha</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">Nenhum usuário cadastrado.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/usuario" style="padding:12px 20px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px solid var(--border)">
+    <div><label>Nome</label><input name="nome" required placeholder="João"></div>
+    <div><label>E-mail</label><input type="email" name="email" required placeholder="joao@email.com"></div>
+    <div><label>Senha</label><input type="password" name="senha" required placeholder="••••••"></div>
+    <div><label>Papel</label>
+      <select name="papel">
+        <option value="admin">Admin</option>
+        <option value="atendente" selected>Atendente</option>
+        <option value="mecanico">Mecânico</option>
+      </select>
+    </div>
+    <div><label>Telefone</label><input name="telefone" placeholder="+554599999999"></div>
+    <button class="btn-primary btn-sm" style="margin-bottom:4px">+ Criar usuário</button>
+  </form>
+</div>

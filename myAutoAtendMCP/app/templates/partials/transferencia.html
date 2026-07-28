@@ -1,0 +1,46 @@
+<div class="card" data-sec="transferencia">
+  <div class="card-head"><h2>Transferencia de Atendimento</h2></div>
+  <p class="meta" style="margin-bottom:12px">Cadastre setores/departamentos para onde o atendimento pode ser transferido. Quando um cliente pedir para falar com outro setor, o bot envia um aviso para o numero/instancia do destino e pausa o atendimento.</p>
+  <table class="tbl">
+    <thead><tr><th>Setor</th><th>Telefone</th><th>Instancia</th><th>Mensagem</th><th></th></tr></thead>
+    <tbody>
+      {% for d in destinos %}
+      <tr>
+        <td>{{ d.nome }}</td>
+        <td class="meta">{{ d.telefone or '—' }}</td>
+        <td class="meta">{% set inst = instancias|selectattr('id', 'equalto', d.instancia_id)|first %}{{ inst.nome if inst else '—' }}</td>
+        <td class="meta" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.mensagem }}</td>
+        <td>
+          <form method="post" action="/admin/transferencia/destino/{{ d.id }}/excluir" style="display:inline" data-nativo>
+            <button class="btn-sm btn-danger" onclick="return confirm('Excluir destino {{ d.nome }}?')">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="meta" style="text-align:center;padding:20px">Nenhum destino cadastrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <details style="margin-top:12px;font-size:13px">
+    <summary style="cursor:pointer;color:var(--oxblood);font-weight:600">+ Novo destino</summary>
+    <form method="post" action="/admin/transferencia/destino" style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+      <div class="row">
+        <div><label>Nome do setor</label><input name="nome" required placeholder="ex.: financeiro, suporte"></div>
+        <div><label>Mensagem pro cliente</label><input name="mensagem" placeholder="{cliente}, voce foi transferido..." value="{cliente}, voce foi transferido para o {nome}. Em breve alguem vai te chamar."></div>
+      </div>
+      <div class="row">
+        <div><label>Telefone do setor (WhatsApp)</label><input name="telefone" placeholder="5545999998888"></div>
+        <div><label>Ou instancia</label>
+          <select name="instancia_id">
+            <option value="0">Nenhuma</option>
+            {% for i in instancias %}
+            <option value="{{ i.id }}">{{ i.nome }}{% if i.numero_fmt %} ({{ i.numero_fmt }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <button class="btn-primary" style="margin-top:4px">Cadastrar destino</button>
+    </form>
+  </details>
+</div>

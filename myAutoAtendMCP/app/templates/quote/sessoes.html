@@ -1,0 +1,79 @@
+{% extends "quote/base.html" %}
+{% block title %}Sessões WhatsApp{% endblock %}
+{% block heading %}Sessões WhatsApp (Cotação){% endblock %}
+{% block quote_js %}quote/sessoes.js{% endblock %}
+{% block quote_content %}
+<div style="margin-bottom:18px;">
+  <button class="btn btn-primary btn-sm" onclick="abrirModalSessao()">+ Nova Sessão</button>
+</div>
+<div class="card">
+  <table class="tbl" id="tbl-sessoes">
+    <thead><tr><th>Nome</th><th>Número</th><th>Status</th><th>Criado em</th><th class="acts">Ações</th></tr></thead>
+    <tbody>
+      {% for s in sessoes %}
+      <tr data-id="{{ s.id }}" data-nome="{{ s.nome }}">
+        <td class="who">{{ s.nome }}</td>
+        <td class="meta">{{ s.numero_fmt or s.numero }}</td>
+        <td class="status-cell">
+          <span class="pill off status-pill">Verificando...</span>
+        </td>
+        <td class="meta">{{ s.criado_em[:10] if s.criado_em else '' }}</td>
+        <td class="acts">
+          <button class="btn btn-sm btn-primary" onclick="conectarSessao({{ s.id }})" style="display:none;" data-action="conectar">Conectar</button>
+          <button class="btn btn-sm btn-danger" onclick="desconectarSessao({{ s.id }})" style="display:none;" data-action="desconectar">Desconectar</button>
+          <button class="btn btn-sm btn-danger" onclick="excluirSessao({{ s.id }})">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">Nenhuma sessão de cotação cadastrada</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="agm-modal" id="modal-sessao">
+  <div class="agm-backdrop" onclick="fecharModalSessao()"></div>
+  <div class="agm-card" style="max-width:440px;">
+    <div class="agm-head">
+      <h2 class="agm-titulo">Nova Sessão WhatsApp</h2>
+      <button class="agm-x" onclick="fecharModalSessao()">✕</button>
+    </div>
+    <div class="agm-body">
+      <form id="form-sessao" onsubmit="return salvarSessao(event)">
+        <label>Nome da Instância *</label>
+        <input name="nome" id="sessao-nome" required placeholder="Ex: cotacao_whatsapp">
+        <label>Número (opcional)</label>
+        <input name="numero" id="sessao-numero" placeholder="5521999999999">
+        <div class="agm-acoes">
+          <button type="button" class="btn btn-ghost" onclick="fecharModalSessao()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Criar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="agm-modal" id="modal-qr">
+  <div class="agm-backdrop" onclick="fecharModalQR()"></div>
+  <div class="agm-card" style="max-width:360px;">
+    <div class="agm-head">
+      <h2 class="agm-titulo">Conectar WhatsApp</h2>
+      <button class="agm-x" onclick="fecharModalQR()">✕</button>
+    </div>
+    <div class="agm-body" style="text-align:center;">
+      <p style="font-size:14px;color:var(--ink-soft);margin-bottom:16px;">
+        Escaneie o QR Code abaixo com o WhatsApp do fornecedor.
+      </p>
+      <div id="qr-code-container" style="min-height:260px;display:flex;align-items:center;justify-content:center;">
+        <p class="empty" id="qr-status">Gerando QR Code...</p>
+      </div>
+      <p id="qr-instructions" style="font-size:12px;color:var(--ink-soft);margin-top:16px;">
+        Abra o WhatsApp > Conectado > Dispositivos Conectados > Conectar
+      </p>
+      <div class="agm-acoes" style="justify-content:center;margin-top:12px;">
+        <button type="button" class="btn btn-ghost" onclick="fecharModalQR()">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

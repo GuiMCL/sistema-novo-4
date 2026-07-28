@@ -1,0 +1,58 @@
+{% extends "quote/base.html" %}
+{% block title %}Categorias{% endblock %}
+{% block heading %}Categorias de Peças{% endblock %}
+{% block quote_js %}quote/categorias.js{% endblock %}
+{% block quote_content %}
+<div style="margin-bottom:18px;">
+  <button class="btn btn-primary btn-sm" onclick="abrirModalCategoria()">+ Nova Categoria</button>
+</div>
+<div class="card">
+  <table class="tbl" id="tbl-categorias">
+    <thead><tr><th>Nome</th><th>Descrição</th><th>Ordem</th><th>Status</th><th class="acts">Ações</th></tr></thead>
+    <tbody>
+      {% for cat in categorias %}
+      <tr data-id="{{ cat.id }}">
+        <td class="who">{{ cat.nome }}</td>
+        <td>{{ cat.descricao }}</td>
+        <td class="meta">{{ cat.ordem }}</td>
+        <td>{% if cat.ativo %}<span class="pill on">Ativo</span>{% else %}<span class="pill off">Inativo</span>{% endif %}</td>
+        <td class="acts">
+          <button class="btn btn-sm btn-ghost" onclick="editarCategoria({{ cat.id }})">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="excluirCategoria({{ cat.id }})">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">Nenhuma categoria cadastrada</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="agm-modal" id="modal-categoria">
+  <div class="agm-backdrop" onclick="fecharModalCategoria()"></div>
+  <div class="agm-card" style="max-width:480px;">
+    <div class="agm-head">
+      <h2 class="agm-titulo" id="modal-categoria-titulo">Nova Categoria</h2>
+      <button class="agm-x" onclick="fecharModalCategoria()">✕</button>
+    </div>
+    <div class="agm-body">
+      <form id="form-categoria" onsubmit="return salvarCategoria(event)">
+        <input type="hidden" name="categoria_id" id="cat-id" value="0">
+        <label>Nome *</label>
+        <input name="nome" id="cat-nome" required>
+        <label>Descrição</label>
+        <textarea name="descricao" id="cat-descricao" rows="3"></textarea>
+        <label>Ordem</label>
+        <input name="ordem" id="cat-ordem" type="number" value="0" style="max-width:100px;">
+        <label class="avisar-cli" style="margin-top:14px;">
+          <input type="checkbox" name="ativo" id="cat-ativo" checked> Ativo
+        </label>
+        <div class="agm-acoes">
+          <button type="button" class="btn btn-ghost" onclick="fecharModalCategoria()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

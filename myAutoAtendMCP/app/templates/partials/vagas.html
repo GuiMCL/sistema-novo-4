@@ -1,0 +1,38 @@
+<!-- ============ VAGAS (BOXES) ============ -->
+<div class="card drag-sec" data-sec="vagas">
+  <div class="card-head"><span class="drag-grip">⠿</span><h2>Vagas / Boxes</h2><span class="tag">{{ vagas|length }} boxes</span></div>
+  <p class="meta" style="padding:0 20px;margin:0 0 10px">Configure os boxes de atendimento da oficina. A capacidade de agendamento é definida pelo número de vagas ativas.</p>
+  <table class="tbl">
+    <thead><tr><th>Ordem</th><th>Nome</th><th>Descrição</th><th>Ativa</th><th></th></tr></thead>
+    <tbody>
+    {% for v in vagas %}
+      <tr>
+        <td>{{ v.ordem }}</td>
+        <td>{{ v.nome }}</td>
+        <td>{{ v.descricao }}</td>
+        <td>{% if v.ativo %}✅{% else %}❌{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/vaga/{{ v.id }}/editar" style="display:inline-flex;gap:4px;flex-wrap:wrap">
+            <input name="nome" value="{{ v.nome }}" size="10" required>
+            <input name="descricao" value="{{ v.descricao }}" size="12" placeholder="Descrição">
+            <input name="ordem" value="{{ v.ordem }}" size="3" type="number">
+            <label style="font-size:12px"><input type="checkbox" name="ativo" value="true" {% if v.ativo %}checked{% endif %}> Ativo</label>
+            <button class="btn-sm">Salvar</button>
+          </form>
+          <form method="post" action="/admin/vaga/{{ v.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir esta vaga?')">
+            <button class="btn-sm btn-danger">Excluir</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nenhuma vaga configurada. Crie abaixo.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/vaga" style="padding:12px 20px;display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--border)">
+    <div><label>Nome</label><input name="nome" required placeholder="Box 1"></div>
+    <div><label>Descrição</label><input name="descricao" placeholder="Elevador hidráulico"></div>
+    <div><label>Ordem</label><input name="ordem" type="number" value="0" style="width:60px"></div>
+    <button class="btn-primary btn-sm" style="margin-bottom:4px">+ Adicionar vaga</button>
+  </form>
+</div>

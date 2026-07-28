@@ -1,0 +1,39 @@
+<!-- ============ HORÁRIOS DE FUNCIONAMENTO ============ -->
+<div class="card drag-sec" id="horarios-card" data-sec="horarios">
+  <div class="card-head" id="horarios-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Horários de Funcionamento</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
+  <div id="horarios-body">
+    <p class="hf-sub">Grade semanal de atendimento — o agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
+    {% set dias_nomes = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'] %}
+    <form method="post" action="/admin/horarios" id="horarios-form">
+      {% for d in range(7) %}
+      <div class="hf-dia" data-dia="{{ d }}">
+        <div class="hf-dia-head">
+          <span class="hf-dia-nome">{{ dias_nomes[d] }}</span>
+          <span class="hf-fechado"{% if horarios_por_dia[d] %} style="display:none"{% endif %}>fechado</span>
+          <button type="button" class="btn-sm btn-ghost hf-add">+ Intervalo</button>
+        </div>
+        <div class="hf-intervalos">
+          {% for h in horarios_por_dia[d] %}
+          <div class="hf-int">
+            <input type="hidden" name="dia" value="{{ d }}">
+            <input name="inicio" type="time" value="{{ h.inicio }}" required>
+            <span class="hf-ate">às</span>
+            <input name="fim" type="time" value="{{ h.fim }}" required>
+            <button type="button" class="btn-sm btn-danger hf-rm" title="Remover intervalo" aria-label="Remover intervalo">✕</button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <button class="btn-primary">Salvar horários</button>
+    </form>
+    <div class="hf-acoes">
+      <form method="post" action="/admin/horarios/restaurar" onsubmit="return confirm('Restaurar o padrão (segunda a sexta, 08:00–12:00 e 13:30–18:00)? A grade atual será substituída.')">
+        <button class="btn-sm btn-ghost">Restaurar padrão</button>
+      </form>
+      <form method="post" action="/admin/horarios/limpar" onsubmit="return confirm('Apagar TODOS os horários? Todos os dias ficarão sem expediente e o agente não oferecerá nenhum horário até você cadastrar novos.')">
+        <button class="btn-sm btn-danger">Apagar tudo</button>
+      </form>
+    </div>
+  </div>
+</div>

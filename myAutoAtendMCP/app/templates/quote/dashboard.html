@@ -1,0 +1,20 @@
+{% extends "quote/base.html" %}
+{% block title %}Dashboard — Cotações{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block quote_js %}quote/dashboard.js{% endblock %}
+{% block quote_content %}
+<div class="q-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px;">
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.total }}</div><div class="q-stat-label">Total</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.abertas }}</div><div class="q-stat-label">Abertas</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.enviadas }}</div><div class="q-stat-label">Enviadas</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.aguardando }}</div><div class="q-stat-label">Aguardando</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.respondidas }}</div><div class="q-stat-label">Respondidas</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.finalizadas }}</div><div class="q-stat-label">Finalizadas</div></div>
+  <div class="q-stat-card"><div class="q-stat-num">{{ stats.canceladas }}</div><div class="q-stat-label">Canceladas</div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+  <div class="card"><h3>Categorias</h3><p style="font-size:2rem;font-weight:700;">{{ stats.categorias }}</p></div>
+  <div class="card"><h3>Peças</h3><p style="font-size:2rem;font-weight:700;">{{ stats.pecas }}</p></div>
+  <div class="card"><h3>Fornecedores</h3><p style="font-size:2rem;font-weight:700;">{{ stats.fornecedores }}</p></div>
+</div>
+{% endblock %}
