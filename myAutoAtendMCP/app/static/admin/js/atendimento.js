@@ -195,7 +195,7 @@ class Atendimento {
       agEl.innerHTML = ags.map(a => {
         const dh = (a.inicio || '').replace('T', ' ');
         return `<div class="ag-item">
-          <div class="ag-servico">${a.servico_nome || 'Servico'}</div>
+          <div class="ag-servico">${a.servico_nome || '—'}</div>
           <div class="ag-data">${dh} ${a.vaga_nome ? '· ' + a.vaga_nome : ''}</div>
           <div><span class="ag-status ${a.status}">${a.status}</span> ${a.placa ? '· ' + a.placa : ''}</div>
         </div>`;
@@ -312,6 +312,7 @@ class Atendimento {
   async criarAgendamento(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
+    if (!formData.get('servico_id')) formData.delete('servico_id');
     try {
       const data = await this.api('/atendimento/api/agendamento', { method: 'POST', body: formData });
       if (data && data.ok) {

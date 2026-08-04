@@ -43,12 +43,12 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
         if mesmo_numero(solicitante, cfg.telefone_dono):
             return  # ação do próprio dono — sem eco
 
-        servico = db.get_servico(agendamento.servico_id)
+        servico = db.get_servico(agendamento.servico_id) if agendamento.servico_id else None
         data, hora = (agendamento.inicio.split("T") + [""])[:2]
         texto = _TEMPLATES[evento].format(
             cliente=agendamento.nome_cliente,
             tel=agendamento.telefone_cliente,
-            servico=servico.nome if servico else f"serviço #{agendamento.servico_id}",
+            servico=servico.nome if servico else (agendamento.descricao or f"serviço #{agendamento.servico_id}"),
             data=data,
             hora=hora,
         )

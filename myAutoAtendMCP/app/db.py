@@ -225,13 +225,14 @@ class LembreteConfig(SQLModel, table=True):
 
 class Agendamento(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    servico_id: int
+    servico_id: Optional[int] = None  # opcional — agendamento pode ser só pelo sintoma (descricao)
     telefone_cliente: str
     nome_cliente: str
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
     fim: str
     status: str = "ativo"  # ativo | cancelado | confirmado | remarcado
     observacoes: str = ""  # campo livre, opcional
+    descricao: str = ""  # sintoma/problema descrito pelo cliente (ex.: "ruído no pneu dianteiro direito")
     # Novos campos p/ multi-vaga + multi-instância + multi-usuário
     vaga_id: Optional[int] = None
     veiculo: str = ""
@@ -1104,6 +1105,42 @@ def _migrar() -> None:
                         f"ALTER TABLE quote_requests ADD COLUMN {col} {tipo}"
                     )
             conn.commit()
+        # Agendamento agora pode ser feito por sintoma/descricao, sem serviço:
+        # 1) coluna descricao 2) servico_id passa a ser opcional (nullable).
+        cols = {r[1]: r for r in conn.exec_driver_sql("PRAGMA table_info(agendamento)")}
+        if cols:
+            if "descricao" not in cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE agendamento ADD COLUMN descricao VARCHAR NOT NULL DEFAULT ''"
+                )
+            if cols["servico_id"][3]:  # notnull
+                _reconstruir_agendamento(conn)
+            conn.commit()
+
+
+def _reconstruir_agendamento(conn) -> None:
+    """SQLite não deixa dropar NOT NULL via ALTER — recria a tabela preservando
+    os dados existentes e mantendo o servico_id opcional."""
+    cols = conn.exec_driver_sql("PRAGMA table_info(agendamento)").fetchall()
+    defs, nomes = [], []
+    for cid, name, ctype, notnull, dflt, pk in cols:
+        if name == "servico_id":
+            notnull = 0
+        d = f'"{name}" {ctype}'
+        if notnull:
+            d += " NOT NULL"
+        if dflt is not None:
+            d += f" DEFAULT {dflt}"
+        if pk:
+            d += " PRIMARY KEY"
+        defs.append(d)
+        nomes.append(f'"{name}"')
+    conn.exec_driver_sql(f"CREATE TABLE agendamento_novo ({', '.join(defs)})")
+    conn.exec_driver_sql(
+        f"INSERT INTO agendamento_novo ({', '.join(nomes)}) SELECT {', '.join(nomes)} FROM agendamento"
+    )
+    conn.exec_driver_sql("DROP TABLE agendamento")
+    conn.exec_driver_sql("ALTER TABLE agendamento_novo RENAME TO agendamento")
 
 
 # ---------------------------------------------------------------------------
@@ -1696,7 +1733,7 @@ def vaga_disponivel_auto(inicio: str, fim: str, ignorar_id: int | None = None) -
 
 
 def criar_agendamento(
-    servico_id: int,
+    servico_id: int | None,
     telefone_cliente: str,
     nome_cliente: str,
     inicio: str,
@@ -1709,6 +1746,7 @@ def criar_agendamento(
     usuario_id: int | None = None,
     instancia_id: int | None = None,
     origem: str = "bot",
+    descricao: str = "",
 ) -> Agendamento | None:
     """Checa conflito (por vagas), auto-atribui vaga e grava."""
     with _lock, _session() as s:
@@ -1730,6 +1768,7 @@ def criar_agendamento(
             usuario_id=usuario_id,
             instancia_id=instancia_id,
             origem=origem,
+            descricao=descricao.strip(),
         )
         s.add(a)
         s.commit()

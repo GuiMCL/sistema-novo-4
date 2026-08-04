@@ -114,8 +114,11 @@
     <div class="modal-box">
       <h3>Novo agendamento</h3>
       <form id="form-agenda" onsubmit="return atendimento.criarAgendamento(event)">
-        <label>Servico</label>
-        <select name="servico_id" required>
+        <label>Sintoma/Descrição</label>
+        <textarea name="descricao" id="ag-descricao" placeholder="Ex.: ruído no pneu dianteiro direito" rows="2" required></textarea>
+        <label>Serviço (opcional)</label>
+        <select name="servico_id">
+          <option value="">Nenhum — apenas sintoma</option>
           {% for s in servicos %}<option value="{{ s.id }}">{{ s.nome }} (R$ {{ "%.2f"|format(s.valor) }})</option>{% endfor %}
         </select>
         <label>Cliente</label>

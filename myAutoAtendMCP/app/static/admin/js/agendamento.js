@@ -67,17 +67,16 @@ if (modal) {
     limparSelecao();
     const servico = servicoSel.value;
     const data = dataInput.value;
-    if (!servico || !data) {
-      dica('Escolha o serviço e a data para ver os horários.');
+    if (!data) {
+      dica('Escolha a data para ver os horários.');
       return;
     }
     dica('Carregando horários…');
     let dados;
     try {
-      const r = await fetch(
-        '/admin/agenda/slots?data=' + encodeURIComponent(data) +
-        '&servico_id=' + encodeURIComponent(servico),
-      );
+      const url = '/admin/agenda/slots?data=' + encodeURIComponent(data) +
+        (servico ? '&servico_id=' + encodeURIComponent(servico) : '');
+      const r = await fetch(url);
       if (!r.ok) throw new Error(r.status);
       dados = await r.json();
     } catch (_) {
@@ -107,7 +106,7 @@ if (modal) {
   function abrir() {
     form.reset();
     limparSelecao();
-    dica('Escolha o serviço e a data para ver os horários.');
+    dica('Escolha a data para ver os horários.');
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
     form.querySelector('[name="nome_cliente"]').focus();
@@ -138,9 +137,11 @@ if (modal) {
     }
     salvarBtn.disabled = true;
     try {
+      const formData = new FormData(form);
+      if (!formData.get('servico_id')) formData.delete('servico_id');
       const r = await fetch(form.action, {
         method: 'POST',
-        body: new FormData(form),
+        body: formData,
         redirect: 'manual',                 // 303 vira opaqueredirect (= sucesso)
         headers: { Accept: 'application/json' },
       });

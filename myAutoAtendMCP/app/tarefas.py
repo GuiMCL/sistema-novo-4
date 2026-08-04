@@ -84,8 +84,8 @@ async def _disparar_lembretes(agora: datetime) -> None:
 async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> None:
     """Envia um lembrete gerado por IA e incrementa o contador."""
     try:
-        servico = db.get_servico(ag.servico_id)
-        nome_servico = servico.nome if servico else "servico"
+        servico = db.get_servico(ag.servico_id) if ag.servico_id else None
+        nome_servico = servico.nome if servico else (ag.descricao or "atendimento")
         data, hora = (ag.inicio.split("T") + [""])[:2]
 
         system = (
@@ -184,8 +184,8 @@ def descrever_tarefa(t: db.Tarefa) -> dict:
     ag = db.get_agendamento(payload.get("agendamento_id") or 0)
     if ag:
         nome_cliente = ag.nome_cliente
-        s = db.get_servico(ag.servico_id)
-        servico = s.nome if s else f"serviço #{ag.servico_id}"
+        s = db.get_servico(ag.servico_id) if ag.servico_id else None
+        servico = s.nome if s else (ag.descricao or f"serviço #{ag.servico_id}")
         quando = ag.inicio
     titulo = _RESUMO_ACAO.get(acao, t.tipo)
     return {
@@ -205,8 +205,8 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     acao = payload.get("acao", "remarcar")
     if acao in ("remarcar", "reagendado") and ag.status not in ("ativo", "confirmado"):
         return None
-    servico = db.get_servico(ag.servico_id)
-    nome_servico = servico.nome if servico else f"serviço #{ag.servico_id}"
+    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
+    nome_servico = servico.nome if servico else (ag.descricao or f"serviço #{ag.servico_id}")
     data, hora = (ag.inicio.split("T") + [""])[:2]
 
     if acao in ("remarcar", "cancelar"):

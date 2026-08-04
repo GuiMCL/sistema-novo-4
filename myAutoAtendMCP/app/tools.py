@@ -48,6 +48,10 @@ def _nome_generico(nome: str | None) -> bool:
 # Tools ABERTAS
 # ---------------------------------------------------------------------------
 
+# Duração usada quando o agendamento é feito por sintoma/descrição, sem serviço
+# cadastrado (o serviço define a duração; sem ele, assume-se 1h por padrão).
+DURACAO_PADRAO = 60
+
 
 @mcp.tool()
 def listar_servicos() -> list[dict]:
@@ -62,16 +66,20 @@ def listar_vagas() -> list[dict]:
 
 
 @mcp.tool()
-def consultar_horarios_disponiveis(data: str, servico_id: int) -> dict:
-    """Lista horários livres em uma data (formato YYYY-MM-DD) para um serviço.
+def consultar_horarios_disponiveis(data: str, servico_id: int | None = None) -> dict:
+    """Lista horários livres em uma data (formato YYYY-MM-DD).
 
-    A capacidade é definida pelo número de vagas/boxes: vários horários podem
-    estar ocupados no mesmo momento se todas as vagas estiverem preenchidas.
-    Retorna também quantas vagas estão livres em cada horário.
+    `servico_id` é opcional: quando informado, o passo usa a duração do serviço;
+    sem serviço, usa a duração padrão. A capacidade é definida pelo número de
+    vagas/boxes: vários horários podem estar ocupados no mesmo momento se todas
+    as vagas estiverem preenchidas. Retorna também quantas vagas estão livres
+    em cada horário.
     """
-    servico = db.get_servico(servico_id)
-    if not servico:
-        return {"erro": "Serviço não encontrado."}
+    servico = None
+    if servico_id is not None:
+        servico = db.get_servico(servico_id)
+        if not servico:
+            return {"erro": "Serviço não encontrado."}
     try:
         dia = date.fromisoformat(data)
     except ValueError:
@@ -79,14 +87,14 @@ def consultar_horarios_disponiveis(data: str, servico_id: int) -> dict:
 
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
-        return {"data": data, "servico": servico.nome, "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
+        return {"data": data, "servico": servico.nome if servico else "", "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
 
     vagas = db.listar_vagas()
     total_vagas = len(vagas) or 1
 
     agora = _agora_local()
     livres: list[dict] = []
-    passo = timedelta(minutes=servico.duracao_min)
+    passo = timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
     for janela in intervalos:
         atual = datetime.fromisoformat(f"{data}T{janela.inicio}")
         limite = datetime.fromisoformat(f"{data}T{janela.fim}")
@@ -108,21 +116,27 @@ def consultar_horarios_disponiveis(data: str, servico_id: int) -> dict:
                     livres.append({"horario": atual.strftime("%H:%M"), "vagas": vagas_livres})
             atual += passo
 
-    return {"data": data, "servico": servico.nome, "horarios": livres, "total_vagas": total_vagas}
+    return {"data": data, "servico": servico.nome if servico else "", "horarios": livres, "total_vagas": total_vagas}
 
 
 @mcp.tool()
 def agendar(
-    servico_id: int,
-    nome_cliente: str,
-    data: str,
+    servico_id: int | None = None,
+    descricao: str = "",
+    nome_cliente: str = "",
+    data: str = "",
     veiculo: str = "",
     placa: str = "",
     observacoes: str = "",
     telefone_solicitante: str | None = None,
 ) -> dict:
-    """Agenda um serviço para uma data. `data` no formato YYYY-MM-DD.
-    A vaga é auto-atribuída. O cliente ocupa uma vaga (box) no DIA inteiro.
+    """Agenda um atendimento para uma data. `data` no formato YYYY-MM-DD.
+
+    Pode ser com serviço (`servico_id`, se existir serviço compatível na lista)
+    ou apenas pelo sintoma/problema descrito pelo cliente em `descricao`
+    (ex.: "ruído no pneu dianteiro direito", "trocar o cabeçote"). Pelo menos
+    um dos dois deve ser informado. A vaga é auto-atribuída e o cliente ocupa
+    uma vaga (box) no DIA inteiro.
 
     Para oficina: informe `veiculo` (modelo do carro) e `placa` se o cliente
     mencionar. O telefone do cliente é o do solicitante (injetado pelo pipeline).
@@ -132,9 +146,13 @@ def agendar(
         return auth.NEGADO_SEM_SOLICITANTE
     if _nome_generico(nome_cliente):
         return {"erro": "Nome ausente ou genérico. Pergunte o nome real do cliente antes de agendar."}
-    servico = db.get_servico(servico_id)
-    if not servico:
-        return {"erro": "Serviço não encontrado."}
+    if not descricao.strip():
+        return {"erro": "Descreva o problema/sintoma do carro em `descricao` antes de agendar."}
+    servico = None
+    if servico_id is not None:
+        servico = db.get_servico(servico_id)
+        if not servico:
+            return {"erro": "Serviço não encontrado."}
     try:
         dia = date.fromisoformat(data)
     except ValueError:
@@ -151,7 +169,7 @@ def agendar(
     dt_fim = datetime.combine(dia, time.fromisoformat(ultimo.fim))
 
     ag = db.criar_agendamento(
-        servico_id=servico_id,
+        servico_id=servico.id if servico else None,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome_cliente,
         inicio=dt_inicio.isoformat(timespec="minutes"),
@@ -160,6 +178,7 @@ def agendar(
         placa=placa.upper(),
         observacoes=observacoes,
         origem="bot",
+        descricao=descricao,
     )
     if not ag:
         return {"erro": "Todas as vagas ocupadas nesta data. Escolha outro dia."}
@@ -211,14 +230,14 @@ def reagendar(
     if not ag:
         return {"erro": "Agendamento não encontrado."}
     inicio_anterior = ag.inicio
-    servico = db.get_servico(ag.servico_id)
+    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
         dt_inicio = datetime.fromisoformat(novo_inicio)
     except ValueError:
         return {"erro": "Horário inválido. Use YYYY-MM-DDTHH:MM."}
     if dt_inicio < _agora_local():
         return {"erro": "Não é possível remarcar para um horário no passado."}
-    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min)
+    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
     if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
         return {"erro": "Fora do horário de funcionamento."}
     novo_fim = dt_fim.isoformat(timespec="minutes")
@@ -349,8 +368,8 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     info_ag = ""
     if agendamentos:
         ultimo = agendamentos[-1]
-        serv = db.get_servico(ultimo.servico_id)
-        nome_serv = serv.nome if serv else ""
+        serv = db.get_servico(ultimo.servico_id) if ultimo.servico_id else None
+        nome_serv = serv.nome if serv else (ultimo.descricao or "")
         dt = (ultimo.inicio or "").replace("T", " ") if ultimo.inicio else ""
         info_ag = f" | {nome_serv} {dt}" if nome_serv else ""
     tel_fmt = formatar_internacional(tel) or tel

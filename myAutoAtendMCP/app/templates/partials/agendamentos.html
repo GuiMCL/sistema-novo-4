@@ -7,7 +7,7 @@
   </div>
   {% endif %}
   <table class="tbl">
-    <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Veículo</th><th>Vaga</th><th>Quando</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Cliente</th><th>Serviço / Sintoma</th><th>Veículo</th><th>Vaga</th><th>Quando</th><th></th></tr></thead>
     <tbody>
     {% for a in agendamentos %}
       {% set vaga_nome = '' %}
@@ -21,7 +21,7 @@
           </div>
         </td>
         <td>
-          {{ servico_nome.get(a.servico_id, '—') }}
+          {% if a.descricao %}<strong>{{ a.descricao }}</strong>{% elif servico_nome.get(a.servico_id) %}{{ servico_nome.get(a.servico_id) }}{% else %}—{% endif %}
           {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
         </td>
         <td class="meta">
@@ -79,21 +79,25 @@
         </div>
       </div>
       <div class="row">
-        <div><label>Serviço</label>
-          <select name="servico_id" id="agm-servico" required>
-            {% for s in servicos if s.ativo %}
-            <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
-            {% else %}
-            <option value="" disabled>Nenhum serviço ativo — cadastre no catálogo</option>
-            {% endfor %}
-          </select>
+        <div>
+          <label>Sintoma/Descrição</label>
+          <input name="descricao" id="agm-descricao" placeholder="Ex.: ruído no pneu dianteiro direito" required>
         </div>
         <div><label>Data</label><input id="agm-data" type="date" required></div>
+      </div>
+      <div>
+        <label>Serviço (opcional) <span style="text-transform:none;font-weight:400">— preencha se souber o serviço exato</span></label>
+        <select name="servico_id" id="agm-servico">
+          <option value="">Nenhum — apenas sintoma</option>
+          {% for s in servicos if s.ativo %}
+          <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
+          {% endfor %}
+        </select>
       </div>
 
       <label>Horário</label>
       <div class="agm-slots" id="agm-slots" aria-live="polite">
-        <p class="agm-slots-dica">Escolha o serviço e a data para ver os horários.</p>
+        <p class="agm-slots-dica">Escolha a data para ver os horários.</p>
       </div>
       <div class="agm-legenda" id="agm-legenda" hidden>
         <span class="agm-leg-item"><span class="agm-leg-quad livre"></span>Livre</span>

@@ -106,7 +106,7 @@ def api_conversas(
             "nao_lido": 0,
             "agendamento": {
                 "id": ultimo_ag.id,
-                "servico": db.get_servico(ultimo_ag.servico_id).nome if ultimo_ag and ultimo_ag.servico_id else "",
+                "servico": db.get_servico(ultimo_ag.servico_id).nome if ultimo_ag and ultimo_ag.servico_id else (ultimo_ag.descricao or ""),
                 "inicio": ultimo_ag.inicio if ultimo_ag else "",
                 "status": ultimo_ag.status if ultimo_ag else "",
                 "placa": ultimo_ag.placa if ultimo_ag else "",
@@ -164,7 +164,7 @@ def api_conversa_detalhe(telefone: str, _: db.Usuario = Depends(auth.login_requi
         "agendamentos": [
             {
                 **a,
-                "servico_nome": servicos.get(a.get("servico_id"), ""),
+                "servico_nome": servicos.get(a.get("servico_id")) or a.get("descricao") or "",
                 "vaga_nome": db.get_vaga(a.get("vaga_id")).nome if a.get("vaga_id") and db.get_vaga(a["vaga_id"]) else "",
             }
             for a in agendamentos
@@ -225,7 +225,8 @@ def api_conversa_pausa(
 def api_criar_agendamento(
     request: Request,
     _: db.Usuario = Depends(auth.login_required),
-    servico_id: int = Form(...),
+    servico_id: int | None = Form(None),
+    descricao: str = Form(""),
     telefone_cliente: str = Form(...),
     nome_cliente: str = Form(...),
     inicio: str = Form(...),
@@ -234,21 +235,22 @@ def api_criar_agendamento(
     observacoes: str = Form(""),
 ):
     from .phone import normalizar
+    from .tools import DURACAO_PADRAO
     from datetime import timedelta
 
     usuario = auth.login_required(request)
-    servico = db.get_servico(servico_id)
-    if not servico:
-        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    servico = db.get_servico(servico_id) if servico_id else None
+    if not servico and not descricao.strip():
+        raise HTTPException(status_code=400, detail="Informe o sintoma/descrição ou selecione um serviço.")
 
     try:
         dt_inicio = datetime.fromisoformat(inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
 
-    fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(timespec="minutes")
+    fim = (dt_inicio + timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)).isoformat(timespec="minutes")
     ag = db.criar_agendamento(
-        servico_id=servico_id,
+        servico_id=servico.id if servico else None,
         telefone_cliente=normalizar(telefone_cliente) or telefone_cliente,
         nome_cliente=nome_cliente.strip(),
         inicio=dt_inicio.isoformat(timespec="minutes"),
@@ -257,6 +259,7 @@ def api_criar_agendamento(
         veiculo=veiculo.strip(),
         placa=placa.strip().upper(),
         usuario_id=usuario.id,
+        descricao=descricao.strip(),
     )
     if not ag:
         raise HTTPException(status_code=409, detail="Sem vagas disponíveis no horário.")
@@ -300,7 +303,7 @@ def api_vagas(_: db.Usuario = Depends(auth.login_required), data: str = ""):
                         "id": a.id,
                         "nome": a.nome_cliente,
                         "placa": a.placa,
-                        "servico": db.get_servico(a.servico_id).nome if a.servico_id else "",
+                        "servico": db.get_servico(a.servico_id).nome if a.servico_id else (a.descricao or ""),
                         "inicio": a.inicio,
                         "fim": a.fim,
                         "status": a.status,
