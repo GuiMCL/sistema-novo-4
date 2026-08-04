@@ -22,6 +22,11 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 from .config import settings
 from .phone import mesmo_numero, normalizar
 
+# Status que mantêm o agendamento válido (ocupa vaga, aparece no painel e na
+# consulta do cliente). "confirmado" é o "ativo" depois de confirmado pelo
+# painel — tudo que filtrava só por "ativo" perdia esses agendamentos.
+STATUS_VIGENTES = ("ativo", "confirmado")
+
 # ---------------------------------------------------------------------------
 # Modelos (tabelas)
 # ---------------------------------------------------------------------------
@@ -1653,13 +1658,13 @@ def listar_agendamentos(apenas_ativos: bool = True) -> list[Agendamento]:
     with _session() as s:
         stmt = select(Agendamento)
         if apenas_ativos:
-            stmt = stmt.where(Agendamento.status == "ativo")
+            stmt = stmt.where(Agendamento.status.in_(STATUS_VIGENTES))
         return list(s.exec(stmt).all())
 
 
 def agendamentos_do_telefone(telefone: str) -> list[Agendamento]:
     with _session() as s:
-        ativos = s.exec(select(Agendamento).where(Agendamento.status == "ativo")).all()
+        ativos = s.exec(select(Agendamento).where(Agendamento.status.in_(STATUS_VIGENTES))).all()
     return [a for a in ativos if mesmo_numero(a.telefone_cliente, telefone)]
 
 
@@ -1693,7 +1698,7 @@ def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) 
 
     # Conta agendamentos ativos que sobrepõem o período
     contagem = 0
-    for a in s.exec(select(Agendamento).where(Agendamento.status == "ativo")).all():
+    for a in s.exec(select(Agendamento).where(Agendamento.status.in_(STATUS_VIGENTES))).all():
         if a.id == ignorar_id:
             continue
         a_ini = datetime.fromisoformat(a.inicio)
@@ -1719,7 +1724,7 @@ def vaga_disponivel_auto(inicio: str, fim: str, ignorar_id: int | None = None) -
         ocupadas: set[int] = set()
         ini = datetime.fromisoformat(inicio)
         f = datetime.fromisoformat(fim)
-        for a in s.exec(select(Agendamento).where(Agendamento.status == "ativo")).all():
+        for a in s.exec(select(Agendamento).where(Agendamento.status.in_(STATUS_VIGENTES))).all():
             if a.id == ignorar_id or a.vaga_id is None:
                 continue
             a_ini = datetime.fromisoformat(a.inicio)
@@ -1778,7 +1783,7 @@ def criar_agendamento(
 def reagendar_agendamento(agendamento_id: int, novo_inicio: str, novo_fim: str) -> bool:
     with _lock, _session() as s:
         a = s.get(Agendamento, agendamento_id)
-        if not a or a.status != "ativo":
+        if not a or a.status not in STATUS_VIGENTES:
             return False
         if _conflita(s, novo_inicio, novo_fim, ignorar_id=agendamento_id):
             return False
@@ -1792,7 +1797,7 @@ def reagendar_agendamento(agendamento_id: int, novo_inicio: str, novo_fim: str) 
 def cancelar_agendamento(agendamento_id: int) -> bool:
     with _lock, _session() as s:
         a = s.get(Agendamento, agendamento_id)
-        if not a or a.status not in ("ativo", "confirmado"):
+        if not a or a.status not in STATUS_VIGENTES:
             return False
         a.status = "cancelado"
         s.add(a)

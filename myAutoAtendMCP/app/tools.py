@@ -105,7 +105,7 @@ def consultar_horarios_disponiveis(data: str, servico_id: int | None = None) -> 
                 # Conta ocupados no período
                 ocupados = 0
                 for a in db.listar_agendamentos():
-                    if a.status != "ativo":
+                    if a.status not in db.STATUS_VIGENTES:
                         continue
                     a_ini = datetime.fromisoformat(a.inicio)
                     a_fim = datetime.fromisoformat(a.fim)
