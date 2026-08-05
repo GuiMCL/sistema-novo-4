@@ -167,6 +167,27 @@ async def completar(system: str, user: str, temperature: float = 0.7) -> str:
     return (r.json()["choices"][0]["message"]["content"] or "").strip()
 
 
+def completar_sync(system: str, user: str, temperature: float = 0.7) -> str:
+    """Versao sincrona de `completar` (para rotas do painel fora do event loop)."""
+    p = _config("texto")
+    with httpx.Client(timeout=60.0) as c:
+        r = c.post(
+            p.base_url.rstrip("/") + "/chat/completions",
+            headers={"Authorization": f"Bearer {p.api_key}"},
+            json={
+                "model": p.modelo or MODELO_PADRAO["texto"],
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": temperature,
+            },
+        )
+    if r.status_code != 200:
+        raise RuntimeError(f"Completions falhou (HTTP {r.status_code}): {r.text[:200]}")
+    return (r.json()["choices"][0]["message"]["content"] or "").strip()
+
+
 async def transcrever_audio(audio_b64: str, mimetype: str = "audio/ogg") -> str:
     """Transcreve áudio (multipart estilo OpenAI, model=whisper-1)."""
     p = _config("audio")

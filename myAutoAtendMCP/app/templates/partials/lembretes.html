@@ -19,9 +19,15 @@
         <input name="horas_antes" type="number" value="{{ lembrete.horas_antes }}" min="0" max="336" required>
       </div>
     </div>
-    <p class="meta" style="margin-top:8px"><strong>As mensagens sao geradas automaticamente pela IA</strong> com os dados do agendamento (nome, servico, data, hora). O tom e cordial e profissional, sem emojis.</p>
-    <input name="mensagem" type="hidden" value="">
-    <input name="mensagem2" type="hidden" value="">
+    <div style="margin-top:10px">
+      <label>Modelo da mensagem <span style="text-transform:none;font-weight:400">(variáveis preenchidas automaticamente no envio)</span></label>
+      <textarea name="mensagem" id="lembrete-msg-0" rows="3" style="width:100%">{{ lembrete.mensagem }}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+        <span class="meta">Variaveis: {nome} · {servico} · {data} · {hora}</span>
+        <button type="button" class="btn-sm" data-lembrete-gerar="0" style="margin-left:auto">Gerar com IA</button>
+      </div>
+      <div id="lembrete-msg-status-0" class="ia-msg" style="display:none"></div>
+    </div>
 
     <h4 style="margin:16px 0 8px;font-size:14px">Segundo aviso (DISPARO 2)</h4>
     <div>
@@ -35,6 +41,15 @@
         <label>Enviar quantas horas antes?</label>
         <input name="horas_antes2" type="number" value="{{ lembrete.horas_antes2 }}" min="0" max="336" required>
       </div>
+    </div>
+    <div style="margin-top:10px">
+      <label>Modelo da mensagem <span style="text-transform:none;font-weight:400">(variáveis preenchidas automaticamente no envio)</span></label>
+      <textarea name="mensagem2" id="lembrete-msg-1" rows="3" style="width:100%">{{ lembrete.mensagem2 }}</textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+        <span class="meta">Variaveis: {nome} · {servico} · {data} · {hora}</span>
+        <button type="button" class="btn-sm" data-lembrete-gerar="1" style="margin-left:auto">Gerar com IA</button>
+      </div>
+      <div id="lembrete-msg-status-1" class="ia-msg" style="display:none"></div>
     </div>
 
     <div class="row" style="margin-top:12px">

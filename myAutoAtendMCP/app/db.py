@@ -1911,6 +1911,28 @@ def editar_instancia(instancia_id: int, **campos) -> InstanciaWhatsApp | None:
         return inst
 
 
+def deletar_instancia(instancia_id: int) -> bool:
+    """Remove a instância do banco de forma definitiva (hard delete).
+
+    Desatrela a instância de registros que a referenciam (agendamentos e
+    destinos de transferência) antes de apagar a linha, para não deixar
+    chave estrangeira órfã. Chamado depois de apagar a sessão na Evolution.
+    """
+    with _lock, _session() as s:
+        inst = s.get(InstanciaWhatsApp, instancia_id)
+        if not inst:
+            return False
+        for a in s.exec(select(Agendamento).where(Agendamento.instancia_id == instancia_id)).all():
+            a.instancia_id = None
+            s.add(a)
+        for d in s.exec(select(TransferenciaDestino).where(TransferenciaDestino.instancia_id == instancia_id)).all():
+            d.instancia_id = None
+            s.add(d)
+        s.delete(inst)
+        s.commit()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Vagas (boxes de atendimento)
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-mcp[cli]
+mcp[cli]>=1.10.1,<2
 fastapi
 uvicorn[standard]
 jinja2

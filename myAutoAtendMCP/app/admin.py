@@ -316,8 +316,13 @@ def excluir_instancia(
 ):
     inst = db.get_instancia(instancia_id)
     if inst:
-        evolution.deletar_instancia_evolution(inst.nome)
-        db.editar_instancia(instancia_id, ativo=False)
+        # Apaga a sessão na Evolution (melhor esforço — se a API falhar,
+        # segue e remove do banco; o startup não recria instância apagada).
+        try:
+            evolution.deletar_instancia_evolution(inst.nome)
+        except Exception:
+            pass
+        db.deletar_instancia(instancia_id)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -393,6 +398,51 @@ def salvar_lembrete(
         timeout_horas=timeout_horas,
     )
     return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/lembrete/gerar")
+def gerar_mensagem_lembrete(
+    _: str = Depends(autenticar),
+    mensagem: str = Form(""),
+    estagio: int = Form(0),
+):
+    """Gera com IA o texto do lembrete a partir do modelo escrito pelo dono.
+
+    O texto usa as variáveis {nome}, {servico}, {data} e {hora}, que são
+    preenchidas automaticamente no envio — a IA mantém essas chaves intactas
+    na resposta para o lembrete funcionar para qualquer agendamento.
+    """
+    texto = mensagem.strip()
+    rotulo = "segundo aviso (um dia antes)" if estagio == 1 else "primeiro aviso (dois dias antes)"
+    system = (
+        "Voce e o assistente de uma oficina mecanica que ajuda o dono a escrever "
+        "lembretes de WhatsApp para clientes. Seja cordial e profissional. "
+        "Nao use emojis. Nao invente informacoes. Responda APENAS com o texto final "
+        "da mensagem, sem citacoes nem explicacoes."
+    )
+    if texto:
+        user = (
+            f"Este e o modelo de mensagem que o dono escreveu para o {rotulo}:\n\n"
+            f"{texto}\n\n"
+            "Aprimore este modelo mantendo o sentido e deixando o tom cordial e "
+            "profissional. Mantenha EXATAMENTE as variaveis entre chaves "
+            "({nome}, {servico}, {data}, {hora}) no texto final — elas serao "
+            "preenchidas com os dados reais do cliente no envio."
+        )
+    else:
+        user = (
+            f"Escreva um modelo de mensagem para o {rotulo} de um agendamento em "
+            "uma oficina mecanica. O modelo deve pedir confirmacao do horario de "
+            "forma cordial e usar as variaveis entre chaves {nome}, {servico}, "
+            "{data} e {hora} onde fizer sentido (elas serao preenchidas com os "
+            "dados reais no envio)."
+        )
+    try:
+        return {"mensagem": ia.completar_sync(system, user)}
+    except ia.IANaoConfigurada as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Nao foi possivel gerar: {e}")
 
 
 # ---------------------------------------------------------------------------

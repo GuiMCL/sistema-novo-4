@@ -82,41 +82,63 @@ async def _disparar_lembretes(agora: datetime) -> None:
 
 
 async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> None:
-    """Envia um lembrete gerado por IA e incrementa o contador."""
+    """Envia um lembrete e incrementa o contador.
+
+    Usa o modelo de mensagem configurado no painel (com as variaveis {nome},
+    {servico}, {data} e {hora} preenchidas com os dados do agendamento). Sem
+    modelo configurado, cai para a geracao por IA (comportamento legado).
+    """
     try:
         servico = db.get_servico(ag.servico_id) if ag.servico_id else None
         nome_servico = servico.nome if servico else (ag.descricao or "atendimento")
         data, hora = (ag.inicio.split("T") + [""])[:2]
 
-        system = (
-            "Voce e um assistente de uma oficina mecânica enviando lembretes "
-            "aos clientes sobre agendamentos. Seja cordial e profissional. "
-            "Nao use emojis. Nao invente informacoes."
-        )
-        if stage == 0:
-            user = (
-                f"Cliente: {ag.nome_cliente}\n"
-                f"Servico: {nome_servico}\n"
-                f"Data: {data}\n"
-                f"Hora: {hora}\n\n"
-                f"Escreva uma mensagem curta e cordial para recordar o cliente "
-                f"sobre este agendamento, pedindo confirmacao."
-            )
-        else:
-            user = (
-                f"Cliente: {ag.nome_cliente}\n"
-                f"Servico: {nome_servico}\n"
-                f"Data: {data}\n"
-                f"Hora: {hora}\n\n"
-                f"Escreva uma mensagem curta e cordial reforçando o agendamento "
-                f"de amanha, pedindo confirmacao."
-            )
+        config = db.get_lembrete_config()
+        modelo = config.mensagem if stage == 0 else config.mensagem2
 
-        try:
-            mensagem = await ia.completar(system, user)
-        except ia.IANaoConfigurada:
-            log.warning("IA nao configurada — lembrete do ag #%d suprimido", ag.id)
-            return
+        if modelo and modelo.strip():
+            # Preenche as variaveis conhecidas sem quebrar outras chaves no texto.
+            mensagem = modelo
+            for chave, valor in {
+                "nome": ag.nome_cliente,
+                "servico": nome_servico,
+                "data": data,
+                "hora": hora,
+            }.items():
+                mensagem = mensagem.replace("{" + chave + "}", str(valor))
+        else:
+            mensagem = None
+
+        if mensagem is None:
+            system = (
+                "Voce e um assistente de uma oficina mecânica enviando lembretes "
+                "aos clientes sobre agendamentos. Seja cordial e profissional. "
+                "Nao use emojis. Nao invente informacoes."
+            )
+            if stage == 0:
+                user = (
+                    f"Cliente: {ag.nome_cliente}\n"
+                    f"Servico: {nome_servico}\n"
+                    f"Data: {data}\n"
+                    f"Hora: {hora}\n\n"
+                    f"Escreva uma mensagem curta e cordial para recordar o cliente "
+                    f"sobre este agendamento, pedindo confirmacao."
+                )
+            else:
+                user = (
+                    f"Cliente: {ag.nome_cliente}\n"
+                    f"Servico: {nome_servico}\n"
+                    f"Data: {data}\n"
+                    f"Hora: {hora}\n\n"
+                    f"Escreva uma mensagem curta e cordial reforçando o agendamento "
+                    f"de amanha, pedindo confirmacao."
+                )
+
+            try:
+                mensagem = await ia.completar(system, user)
+            except ia.IANaoConfigurada:
+                log.warning("IA nao configurada — lembrete do ag #%d suprimido", ag.id)
+                return
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
         instancia = whatsapp.get_instancia_do_contato(alvo)
