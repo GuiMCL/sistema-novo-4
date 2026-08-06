@@ -14,7 +14,7 @@ tabela Conversa, janela de 50 mensagens (paridade com o Redis Chat Memory).
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from pydantic_ai import Agent
@@ -97,12 +97,12 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - Antes de agendar, CONFIRME com o cliente o serviço e a DATA.
 - O agendamento é por DIA INTEIRO, não por horário. O cliente ocupa uma vaga (box) pelo dia todo. NUNCA pergunte horário.
 - NUNCA tente verificar ou consultar vagas — não há ferramenta para isso. Apenas pergunte o dia desejado e chame agendar(data=...); ele mesmo verifica se há vaga.
-- Converta datas relativas (amanhã, sexta) para YYYY-MM-DD usando a data atual informada no início.
+- Converta datas relativas (hoje, amanhã, sexta, essa/proxima semana) para YYYY-MM-DD usando SEMPRE a data atual informada no início da mensagem do sistema. Considere a semana iniciando na segunda-feira: "essa semana" vai de segunda a domingo da semana atual, "proxima semana" e a semana seguinte. Em caso de dúvida, confirme o dia com o cliente antes de agendar.
 - Se faltar o nome do cliente para agendar, pergunte.
 - Mostre valores em reais e durações em minutos.
 - Gestão (fechar/abrir data ou período de datas, bloquear horário, remanejar um dia avisando os clientes, criar/editar serviço, ver agenda completa) é restrita ao dono.
 - Se agendar retornar erro de lotação, avise o cliente educadamente e pergunte se prefere outro horário.
-- PERGUNTAS FORA DO ESCOPO: Se o cliente perguntar algo fora do contexto de agendamentos, servicos ou atendimento da oficina (ex.: curiosidades, tutoriais, opiniao sobre outros assuntos), responda educadamente que voce so pode ajudar com questoes relacionadas a agenda e servicos do estabelecimento. Nao responda perguntas de conhecimento geral, nao de opinioes, nao faca calculos.
+- PERGUNTAS FORA DO ESCOPO: Voce atende SOMENTE questoes de agendamento, servicos e atendimento do estabelecimento (e temas relacionados as ferramentas). Nada fora disso (curiosidades, tutoriais, opiniao sobre outros assuntos, noticias, conteudos genericos) deve ser recusado educadamente: diga que so pode ajudar com agendamentos e servicos do estabelecimento. Nao responda perguntas de conhecimento geral, nao de opinioes, nao faca calculos nem resolva problemas fora do escopo. Se nao ficou claro, peca ao cliente para explicar em relacao a agenda/servicos.
 
 ## Persona
 - Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
@@ -186,9 +186,21 @@ def _system_prompt() -> str:
     except Exception:
         tz = ZoneInfo("America/Sao_Paulo")
     agora = datetime.now(tz)
+    dia_semana = _DIAS_SEMANA[agora.weekday()]
+    fds = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    inicio_semana = fds - timedelta(days=agora.weekday())  # segunda-feira atual
+    fim_semana = inicio_semana + timedelta(days=6)
     prefixo = (
         f"Data e hora atuais ({cfg.fuso}): {agora.strftime('%Y-%m-%d %H:%M')} "
-        f"({_DIAS_SEMANA[agora.weekday()]})."
+        f"({dia_semana}).\n"
+        f"HOJE é {dia_semana} ({agora:%d/%m/%Y}). "
+        f"A semana atual (segunda a domingo) vai de {inicio_semana:%d/%m} até {fim_semana:%d/%m}.\n"
+        f"Regra de data: SEMPRE converta dias relativos usando estes dados — "
+        f"hoje={agora:%d/%m/%Y} ({dia_semana}), amanhã={fds + timedelta(days=1):%d/%m/%Y}, "
+        f"depois de amanhã={fds + timedelta(days=2):%d/%m/%Y}. "
+        f"'essa semana' = {inicio_semana:%d/%m} a {fim_semana:%d/%m}; 'próxima semana' = "
+        f"{inicio_semana + timedelta(days=7):%d/%m} a {fim_semana + timedelta(days=7):%d/%m}. "
+        f"Formato final de data SEMPRE YYYY-MM-DD."
     )
     # Remetente vem do contextvar (setado no pipeline antes do run) — mesmo
     # critério usado p/ montar o toolset em `responder`.
