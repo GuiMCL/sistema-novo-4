@@ -992,10 +992,6 @@ def criar_destino_api(
 
 
 @router.post("/admin/transferencia/destino/{destino_id}/excluir")
-def excluir_destino_api(destino_id: int, request: Request, _: db.Usuario = Depends(auth.admin_required)):
-    s = next(db._session())
-    d = s.get(db.TransferenciaDestino, destino_id)
-    if d:
-        s.delete(d)
-        s.commit()
+def excluir_destino_api(destino_id: int, _: db.Usuario = Depends(auth.admin_required)):
+    db.deletar_destino_transferencia(destino_id)
     return {"ok": True}

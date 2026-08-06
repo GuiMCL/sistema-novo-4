@@ -1186,6 +1186,16 @@ def criar_destino_transferencia(nome: str, telefone: str = "", instancia_id: int
         return d
 
 
+def deletar_destino_transferencia(destino_id: int) -> bool:
+    with _lock, _session() as s:
+        d = s.get(TransferenciaDestino, destino_id)
+        if not d:
+            return False
+        s.delete(d)
+        s.commit()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Lembretes (config + busca)
 # ---------------------------------------------------------------------------
