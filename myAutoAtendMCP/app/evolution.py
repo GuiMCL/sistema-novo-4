@@ -33,6 +33,22 @@ def _client() -> httpx.Client:
     )
 
 
+def _instancia_fallback() -> str:
+    """Nome da instância para usar quando não houver instância explícita.
+
+    Usa a primeira instância ativa cadastrada no banco; só cai no default
+    (`evo_bot`) se não houver nenhuma — evita apontar para uma instância que
+    não existe e quebrar envios (404)."""
+    from . import db
+    try:
+        padrao = db.instancia_padrao()
+        if padrao:
+            return padrao.nome
+    except Exception:
+        pass
+    return settings.evolution_instance
+
+
 def _async_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=settings.evolution_api_url.rstrip("/"),
@@ -285,7 +301,7 @@ async def garantir_multi_instancias(webhook_url: str) -> None:
 
 
 async def obter_midia_base64(message_id: str, instancia: str | None = None) -> dict:
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     async with _async_client() as c:
         r = await c.post(
             f"/chat/getBase64FromMediaMessage/{nome}",
@@ -296,7 +312,7 @@ async def obter_midia_base64(message_id: str, instancia: str | None = None) -> d
 
 
 async def marcar_como_lida(remote_jid: str, from_me: bool, message_id: str, instancia: str | None = None) -> None:
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     try:
         async with _async_client() as c:
             await c.post(
@@ -308,7 +324,7 @@ async def marcar_como_lida(remote_jid: str, from_me: bool, message_id: str, inst
 
 
 def enviar_texto_sync(numero: str, texto: str, instancia: str | None = None) -> None:
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     with _client() as c:
         r = c.post(
             f"/message/sendText/{nome}",
@@ -322,7 +338,7 @@ async def enviar_texto(
     numero: str, texto: str, digitando_ms: int = 0,
     timeout: float | None = None, instancia: str | None = None,
 ) -> None:
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     corpo: dict = {"number": numero, "text": texto}
     if digitando_ms > 0:
         corpo["delay"] = digitando_ms
@@ -396,7 +412,7 @@ def foto_perfil(numero: str, instancia: str | None = None) -> str | None:
     digitos = re.sub(r"\D", "", numero or "")
     if not digitos:
         return None
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     agora = time.monotonic()
     em_cache = _foto_cache.get(digitos)
     if em_cache and em_cache[0] > agora:
@@ -421,7 +437,7 @@ def checar_numero(numero: str, instancia: str | None = None) -> dict | None:
     digitos = re.sub(r"\D", "", numero or "")
     if not digitos:
         return None
-    nome = instancia or settings.evolution_instance
+    nome = instancia or _instancia_fallback()
     agora = time.monotonic()
     em_cache = _numero_cache.get(digitos)
     if em_cache and em_cache[0] > agora:

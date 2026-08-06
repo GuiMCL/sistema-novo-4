@@ -128,7 +128,7 @@ async def _processar_evento(body: dict) -> None:
 
         texto = _sanitizar_entrada(texto)
 
-        db.upsert_cliente(remote_jid, data.get("pushName") or "")
+        db.upsert_cliente(remote_jid, data.get("pushName") or "", instancia_id=instancia_id)
 
         # Marca instância na memória do contato (cache)
         _instance_map[remote_jid] = instancia_nome
@@ -233,13 +233,25 @@ async def _responder_contato(remote_jid: str, mensagem: str) -> None:
 
 
 def get_instancia_do_contato(telefone: str) -> str | None:
-    """Resolve a instância Evolution de um contato pelo telefone."""
+    """Resolve a instância Evolution de um contato pelo telefone.
+
+    Ordem: cache em memória (última instância vista no webhook) → instância
+    persistida no Cliente → instância padrão ativa. Nunca retorna uma
+    instância inexistente."""
     from .phone import normalizar
     norm = normalizar(telefone) or telefone
     for jid, inst in _instance_map.items():
         if norm in jid or jid.startswith(norm):
             return inst
-    return None
+    cliente = db.get_cliente(telefone)
+    if cliente and cliente.instancia_id:
+        inst = db.get_instancia(cliente.instancia_id)
+        if inst:
+            return inst.nome
+    padrao = db.instancia_padrao()
+    if padrao:
+        return padrao.nome
+    return settings.evolution_instance
 
 
 async def enviar_bolhas(numero: str, resposta: str, instancia: str | None = None) -> None:

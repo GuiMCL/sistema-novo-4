@@ -116,6 +116,7 @@ class Cliente(SQLModel, table=True):
     telefone: str = Field(primary_key=True)  # E.164 normalizado
     nome: str = ""
     bot_pausado: bool = False
+    instancia_id: Optional[int] = None  # qual instância WhatsApp atende o contato
 
 
 class Servico(SQLModel, table=True):
@@ -1121,6 +1122,12 @@ def _migrar() -> None:
             if cols["servico_id"][3]:  # notnull
                 _reconstruir_agendamento(conn)
             conn.commit()
+        cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(cliente)")}
+        if cols and "instancia_id" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE cliente ADD COLUMN instancia_id INTEGER"
+            )
+            conn.commit()
 
 
 def _reconstruir_agendamento(conn) -> None:
@@ -1519,9 +1526,11 @@ def listar_clientes() -> list[Cliente]:
         return list(s.exec(select(Cliente)).all())
 
 
-def upsert_cliente(telefone: str, nome: str | None = None) -> Cliente:
+def upsert_cliente(telefone: str, nome: str | None = None, instancia_id: int | None = None) -> Cliente:
     """Cria ou atualiza um contato. `nome` só sobrescreve quando vem
-    preenchido — um pushName vazio não apaga o nome já salvo."""
+    preenchido — um pushName vazio não apaga o nome já salvo. `instancia_id`
+    grava a instância que atende o contato (usada para reenviar sem depender
+    do cache em memória após restart)."""
     chave = normalizar(telefone) or telefone
     with _lock, _session() as s:
         c = s.get(Cliente, chave)
@@ -1529,6 +1538,8 @@ def upsert_cliente(telefone: str, nome: str | None = None) -> Cliente:
             c = Cliente(telefone=chave)
         if nome and nome.strip():
             c.nome = nome.strip()
+        if instancia_id:
+            c.instancia_id = instancia_id
         s.add(c)
         s.commit()
         return c
@@ -1907,6 +1918,15 @@ def listar_instancias() -> list[InstanciaWhatsApp]:
 def get_instancia(instancia_id: int) -> InstanciaWhatsApp | None:
     with _session() as s:
         return s.get(InstanciaWhatsApp, instancia_id)
+
+
+def instancia_padrao() -> InstanciaWhatsApp | None:
+    """Primeira instância ativa cadastrada — fallback seguro para envios sem
+    instância conhecida (evita apontar p/ uma instância que não existe)."""
+    with _session() as s:
+        return s.exec(
+            select(InstanciaWhatsApp).where(InstanciaWhatsApp.ativo)
+        ).first()
 
 
 def get_instancia_por_nome(nome: str) -> InstanciaWhatsApp | None:
