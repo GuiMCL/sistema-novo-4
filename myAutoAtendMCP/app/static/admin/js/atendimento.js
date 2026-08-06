@@ -9,7 +9,11 @@ class Atendimento {
   }
 
   init() {
-    this.carregarConversas();
+    this.carregarConversas().then(() => {
+      const params = new URLSearchParams(location.search);
+      const tel = params.get('conv');
+      if (tel) this.abrirConversa(tel);
+    });
     this.pollTimer = setInterval(() => this._poll(), 10000);
     window.addEventListener('resize', () => this._ajustarPainelMobile());
   }

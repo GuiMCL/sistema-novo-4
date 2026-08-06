@@ -65,7 +65,10 @@ function linha(t) {
         ? `<div class="proat-erro" title="Último erro">${esc(t.resultado)}</div>` : ''}
     </div>
     ${t.status === 'pendente'
-      ? `<button type="button" class="btn-sm btn-danger proat-cancel" data-id="${t.id}">Cancelar</button>` : ''}
+      ? `<div class="proat-acoes">
+          <button type="button" class="btn-sm btn-danger proat-cancel" data-id="${t.id}">Cancelar</button>
+          <button type="button" class="btn-sm proat-del" data-id="${t.id}" data-nome="${esc(t.titulo)}">Excluir</button>
+        </div>` : ''}
   `;
   return el;
 }
@@ -100,19 +103,21 @@ async function carregar() {
 }
 
 lista.addEventListener('click', async e => {
-  const btn = e.target.closest('.proat-cancel');
+  const btn = e.target.closest('.proat-cancel, .proat-del');
   if (!btn) return;
+  const excluir = btn.classList.contains('proat-del');
+  if (excluir && !confirm(`Excluir "${btn.dataset.nome}" da fila definitivamente?`)) return;
   btn.disabled = true;
   btn.textContent = '…';
   try {
-    const r = await fetch(`/admin/tarefas/${btn.dataset.id}/cancelar`, {
+    const r = await fetch(`/admin/tarefas/${btn.dataset.id}/${excluir ? 'excluir' : 'cancelar'}`, {
       method: 'POST', headers: { 'Accept': 'application/json' },
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      toast('erro', d.detail || 'Não foi possível cancelar esta tarefa.');
+      toast('erro', d.detail || `Não foi possível ${excluir ? 'excluir' : 'cancelar'} esta tarefa.`);
     }
-  } catch (_) { toast('erro', 'Falha de conexão ao cancelar a tarefa.'); }
+  } catch (_) { toast('erro', `Falha de conexão ao ${excluir ? 'excluir' : 'cancelar'} a tarefa.`); }
   carregar();  // recarrega de qualquer forma — reflete o estado real
 });
 

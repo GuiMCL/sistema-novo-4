@@ -41,6 +41,7 @@ def pagina_atendimento(request: Request, _: db.Usuario = Depends(auth.login_requ
             "usuarios": db.listar_usuarios(),
             "servicos": db.listar_servicos_ativos(),
             "usuario": usuario,
+            "usuario_atual_id": usuario.id,
         },
     )
 

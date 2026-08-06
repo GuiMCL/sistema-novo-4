@@ -1443,6 +1443,17 @@ def cancelar_tarefa(tarefa_id: int) -> bool:
     return True
 
 
+def excluir_tarefa(tarefa_id: int) -> bool:
+    """Remove a tarefa da fila de forma definitiva (hard delete, qualquer status)."""
+    with _lock, _session() as s:
+        t = s.get(Tarefa, tarefa_id)
+        if not t:
+            return False
+        s.delete(t)
+        s.commit()
+    return True
+
+
 def chaves_conversas() -> list[str]:
     """Chaves (remoteJid) com memória existente — p/ o worker reusar a chave
     do contato em vez de inventar outra (nono dígito muda o jid)."""
@@ -1860,6 +1871,27 @@ def editar_usuario(usuario_id: int, **campos) -> Usuario | None:
         s.add(u)
         s.commit()
         return u
+
+
+def deletar_usuario(usuario_id: int) -> bool:
+    """Remove um usuário do banco (hard delete).
+
+    Desatrela agendamentos e instâncias que apontavam para ele antes de
+    apagar a linha, para não deixar chave estrangeira órfã.
+    """
+    with _lock, _session() as s:
+        u = s.get(Usuario, usuario_id)
+        if not u:
+            return False
+        for a in s.exec(select(Agendamento).where(Agendamento.usuario_id == usuario_id)).all():
+            a.usuario_id = None
+            s.add(a)
+        for i in s.exec(select(InstanciaWhatsApp).where(InstanciaWhatsApp.usuario_id == usuario_id)).all():
+            i.usuario_id = None
+            s.add(i)
+        s.delete(u)
+        s.commit()
+    return True
 
 
 # ---------------------------------------------------------------------------

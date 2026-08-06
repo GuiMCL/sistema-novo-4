@@ -32,6 +32,12 @@
               <input type="password" name="senha" placeholder="Nova senha" required size="10">
               <button class="btn-sm">Resetar senha</button>
             </form>
+            {% if u.id != usuario_atual_id %}
+            <form method="post" action="/admin/usuario/{{ u.id }}/excluir" style="margin-top:4px"
+                  onsubmit="return confirm('Excluir o usuário {{ u.nome }} ({{ u.email }}) definitivamente?')">
+              <button class="btn-sm btn-danger">Excluir</button>
+            </form>
+            {% endif %}
           </details>
         </td>
       </tr>

@@ -8,6 +8,7 @@ Autenticação:
 
 from __future__ import annotations
 
+import calendar
 import re
 import secrets
 from datetime import date, datetime, time, timedelta
@@ -140,6 +141,37 @@ def pagina_dashboard(request: Request, _: str = Depends(autenticar_pagina)):
     )
 
 
+_MESES_PT = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+_DIAS_SEMANA_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+
+def _calendario_mes(agendamentos: list[db.Agendamento], ano: int, mes: int) -> list[list[dict]]:
+    """Grade do mês (segunda a domingo) com os agendamentos agrupados por dia."""
+    por_dia: dict[date, list[db.Agendamento]] = {}
+    for a in agendamentos:
+        try:
+            d = date.fromisoformat(a.inicio.split("T")[0])
+        except (ValueError, AttributeError):
+            continue
+        por_dia.setdefault(d, []).append(a)
+    hoje = date.today()
+    grade = calendar.Calendar(firstweekday=0).monthdatescalendar(ano, mes)
+    semanas: list[list[dict]] = []
+    for semana in grade:
+        linha = []
+        for d in semana:
+            linha.append({
+                "dia": d.day,
+                "fora": d.month != mes,
+                "hoje": d == hoje,
+                "data": d.isoformat(),
+                "agendamentos": sorted(por_dia.get(d, []), key=lambda a: a.inicio),
+            })
+        semanas.append(linha)
+    return semanas
+
+
 @router.get("/admin/agenda", response_class=HTMLResponse)
 def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autenticar_pagina)):
     servicos = db.listar_todos_servicos()
@@ -170,6 +202,37 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
                  or any(db.get_conversa(a.telefone_cliente) for _ in [1]))
         ]
 
+    # Navegacao do calendario (mes/ano via query string)
+    hoje = date.today()
+    try:
+        mes = int(request.query_params.get("mes", hoje.month))
+        ano = int(request.query_params.get("ano", hoje.year))
+    except (TypeError, ValueError):
+        mes, ano = hoje.month, hoje.year
+    if not (1 <= mes <= 12):
+        mes, ano = hoje.month, hoje.year
+    base_url = "/admin/agenda" + ("?ativos=1&" if ativos else "?")
+    mes_prox = date(ano, mes, 1).replace(day=28) + timedelta(days=4)
+    mes_ant = date(ano, mes, 1) - timedelta(days=1)
+
+    vaga_por_id = {v.id: v.nome for v in vagas}
+    ag_detalhe: dict[int, dict] = {}
+    for a in agendamentos:
+        srv = nome_por_id.get(a.servico_id) if a.servico_id else None
+        ag_detalhe[a.id] = {
+            "id": a.id,
+            "nome": a.nome_cliente,
+            "telefone": a.telefone_cliente,
+            "servico": srv,
+            "descricao": a.descricao,
+            "veiculo": a.veiculo,
+            "placa": a.placa,
+            "vaga": vaga_por_id.get(a.vaga_id) if a.vaga_id else "",
+            "inicio": a.inicio,
+            "fim": a.fim,
+            "obs": a.observacoes,
+        }
+
     return templates.TemplateResponse(
         request, "admin_agenda.html",
         {
@@ -184,7 +247,16 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
             "evolution_url": settings.evolution_external_url,
             "vagas": vagas,
             "lembrete": lembrete,
-            "apenas_ativos": True,
+            "apenas_ativos": bool(ativos),
+            "cal": _calendario_mes(agendamentos, ano, mes),
+            "mes_nome": _MESES_PT[mes],
+            "ano_exib": ano,
+            "hoje_iso": hoje.isoformat(),
+            "mes_ant_url": f"{base_url}mes={mes_ant.month}&ano={mes_ant.year}",
+            "mes_prox_url": f"{base_url}mes={mes_prox.month}&ano={mes_prox.year}",
+            "hoje_url": base_url.rstrip("?&"),
+            "dias_semana": _DIAS_SEMANA_PT,
+            "ag_detalhe": ag_detalhe,
             **_contexto_base(),
         },
     )
@@ -217,6 +289,7 @@ def pagina_config(request: Request, _: str = Depends(autenticar_pagina)):
             "lembrete": lembrete,
             "destinos": destinos,
             "instancias": db.listar_instancias(),
+            "usuario_atual_id": request.session.get("usuario_id"),
             **_contexto_base(),
         },
     )
@@ -271,6 +344,23 @@ def resetar_senha(
     senha: str = Form(...),
 ):
     db.editar_usuario(usuario_id, senha_hash=auth.hash_senha(senha))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/usuario/{usuario_id}/excluir")
+def excluir_usuario(
+    usuario_id: int,
+    request: Request,
+    atual: db.Usuario = Depends(auth.admin_required),
+):
+    if atual.id == usuario_id:
+        raise HTTPException(status_code=400, detail="Você não pode excluir o próprio usuário logado.")
+    alvo = db.get_usuario(usuario_id)
+    if alvo and alvo.papel == "admin":
+        admins = [u for u in db.listar_usuarios() if u.papel == "admin" and u.ativo]
+        if len(admins) <= 1:
+            raise HTTPException(status_code=400, detail="Não é possível excluir o último administrador.")
+    db.deletar_usuario(usuario_id)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -991,6 +1081,13 @@ def tarefas_estado(_: str = Depends(autenticar)):
 def tarefa_cancelar(tarefa_id: int, _: str = Depends(autenticar)):
     if not db.cancelar_tarefa(tarefa_id):
         raise HTTPException(status_code=409, detail="Tarefa não está mais pendente na fila.")
+    return {"ok": True}
+
+
+@router.post("/admin/tarefas/{tarefa_id}/excluir")
+def tarefa_excluir(tarefa_id: int, _: str = Depends(autenticar)):
+    if not db.excluir_tarefa(tarefa_id):
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
     return {"ok": True}
 
 

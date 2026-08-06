@@ -6,59 +6,47 @@
     <button type="button" class="btn-primary btn-sm" id="ag-novo-abrir">+ Novo agendamento</button>
   </div>
   {% endif %}
-  <table class="tbl">
-    <thead><tr><th>#</th><th>Cliente</th><th>Serviço / Sintoma</th><th>Veículo</th><th>Vaga</th><th>Quando</th><th></th></tr></thead>
-    <tbody>
-    {% for a in agendamentos %}
-      {% set vaga_nome = '' %}
-      {% for v in vagas %}{% if v.id == a.vaga_id %}{% set vaga_nome = v.nome %}{% endif %}{% endfor %}
-      <tr>
-        <td class="id">{{ a.id }}</td>
-        <td>
-          <div class="cli">
-            <div class="ava" data-num="{{ a.telefone_cliente }}">{{ (a.nome_cliente or '?')[:1]|upper }}</div>
-            <div><div class="who">{{ a.nome_cliente }}</div><div class="meta">{{ a.telefone_cliente }}</div></div>
-          </div>
-        </td>
-        <td>
-          {% if a.descricao %}<strong>{{ a.descricao }}</strong>{% elif servico_nome.get(a.servico_id) %}{{ servico_nome.get(a.servico_id) }}{% else %}—{% endif %}
-          {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
-        </td>
-        <td class="meta">
-          {% if a.veiculo %}{{ a.veiculo }}{% endif %}
-          {% if a.placa %}<br><strong>{{ a.placa }}</strong>{% endif %}
-        </td>
-        <td>{{ vaga_nome or '—' }}</td>
-        <td class="when-cell">
-          <span class="d">{{ a.inicio.split('T')[0] }}</span>
-          <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
-          {% if not apenas_ativos %}
-          <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar">
-            <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
-            <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança"><input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente</label>
-            <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
-          </form>
+
+  <div class="cal-toolbar">
+    <a href="{{ mes_ant_url }}" class="cal-nav" aria-label="Mês anterior" title="Mês anterior">←</a>
+    <span class="cal-mes">{{ mes_nome }} <b>{{ ano_exib }}</b></span>
+    <a href="{{ mes_prox_url }}" class="cal-nav" aria-label="Próximo mês" title="Próximo mês">→</a>
+    <a href="{{ hoje_url }}" class="btn-sm btn-ghost cal-hoje">Hoje</a>
+  </div>
+
+  <div class="cal-grid" role="grid" aria-label="Calendário de agendamentos">
+    {% for d in dias_semana %}<div class="cal-dow" role="columnheader">{{ d }}</div>{% endfor %}
+    {% for semana in cal %}
+      {% for dia in semana %}
+      <div class="cal-dia{% if dia.fora %} is-fora{% endif %}{% if dia.hoje %} is-hoje{% endif %}" role="gridcell">
+        <span class="cal-num">{{ dia.dia }}</span>
+        <div class="cal-itens">
+          {% if dia.agendamentos %}
+            {% for a in dia.agendamentos %}
+            <button type="button" class="cal-chip" data-id="{{ a.id }}" data-telefone="{{ a.telefone_cliente }}"
+                    title="{{ a.nome_cliente }} · {{ a.inicio.split('T')[1][:5] }}">
+              <span class="cal-chip-t">{{ a.inicio.split('T')[1][:5] }}</span>
+              <span class="cal-chip-n">{{ a.nome_cliente or '?' }}</span>
+            </button>
+            {% endfor %}
           {% endif %}
-        </td>
-        <td>
-          <div class="acts">
-            <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
-            {% if not apenas_ativos %}
-            <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
-            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
-                  onsubmit="if(!confirm('Cancelar o agendamento de {{ a.nome_cliente }}?'))return false;this.avisar_cliente.value=confirm('Avisar {{ a.nome_cliente }} pelo WhatsApp? A IA manda a mensagem do cancelamento.')?'1':'';">
-              <input type="hidden" name="avisar_cliente" value="">
-              <button class="btn-sm btn-danger">Cancelar</button>
-            </form>
-            {% endif %}
-          </div>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="7" class="empty">Nenhum agendamento ativo no momento.</td></tr>
+        </div>
+      </div>
+      {% endfor %}
     {% endfor %}
-    </tbody>
-  </table>
+  </div>
+</div>
+
+<!-- Modal de detalhe do agendamento (aberto ao clicar num chip do calendário) -->
+<div class="agd-modal" id="agd-modal" role="dialog" aria-modal="true" aria-labelledby="agd-titulo">
+  <div class="agd-backdrop" data-fechar></div>
+  <div class="agd-card">
+    <header class="agd-head">
+      <h2 class="agd-titulo" id="agd-titulo">Agendamento</h2>
+      <button type="button" class="agd-x" id="agd-x" aria-label="Fechar">✕</button>
+    </header>
+    <div class="agd-body" id="agd-body"></div>
+  </div>
 </div>
 
 <!-- Modal "Novo agendamento": fora do card p/ sobreviver a ocultar/arrastar
@@ -120,3 +108,5 @@
     </form>
   </div>
 </div>
+
+<script>window.__CAL__ = { detalhe: {{ ag_detalhe | tojson }}, apenas_ativos: {{ 'true' if apenas_ativos else 'false' }} };</script>

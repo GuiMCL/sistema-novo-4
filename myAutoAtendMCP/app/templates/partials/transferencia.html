@@ -11,8 +11,9 @@
         <td class="meta">{% set inst = instancias|selectattr('id', 'equalto', d.instancia_id)|first %}{{ inst.nome if inst else '—' }}</td>
         <td class="meta" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.mensagem }}</td>
         <td>
-          <form method="post" action="/admin/transferencia/destino/{{ d.id }}/excluir" style="display:inline" data-nativo>
-            <button class="btn-sm btn-danger" onclick="return confirm('Excluir destino {{ d.nome }}?')">✕</button>
+          <form method="post" action="/admin/transferencia/destino/{{ d.id }}/excluir" style="display:inline"
+                onsubmit="return confirm('Excluir o destino de transferência &quot;{{ d.nome }}&quot;? Esta ação não pode ser desfeita.')">
+            <button class="btn-sm btn-danger">Excluir</button>
           </form>
         </td>
       </tr>
