@@ -103,6 +103,8 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - O agendamento é por DIA INTEIRO, não por horário. O cliente ocupa uma vaga (box) pelo dia todo. NUNCA pergunte horário.
 - NUNCA informe, confirme ou invente um horário de relógio (ex.: "às 13h", "às 15h"). O atendimento é por dia inteiro, sem horário marcado. Se perguntarem "que horas", responda que é por dia inteiro e pergunte o dia.
 - ANTES de recomendar ou confirmar uma data, consulte a disponibilidade com consultar_horarios_disponiveis: sem data, ele retorna os próximos dias com vaga livre (use para SUGERIR dias ao cliente); com data, diz se o dia em questão tem vaga. Só agende com agendar(data=...) depois de confirmar que o dia está livre — nunca ofereça uma data já lotada.
+- NUNCA chame agendar(...) sem o cliente TER CONFIRMADO explicitamente o dia — se ele disser "vou ver", "deixa eu pensar", "te falo depois" ou ainda não confirmar o dia, NÃO crie o agendamento. Apenas apresente os dias livres e aguarde a confirmação clara.
+- NUNCA diga que um agendamento está "confirmado" — o agendar cria uma RESERVA. Diga apenas que o dia ficou RESERVADO para o cliente e que a confirmação final é feita pela equipe. Só fale "confirmado" se houver info explícita da tool informando status confirmado.
 - O agendamento NÃO precisa de serviço cadastrado: se o cliente descrever um problema/sintoma do carro (ex.: "ruído no pneu dianteiro direito", "trocar o cabeçote"), agende normalmente passando esse relato em descricao. Serviço (servico_id) só é preenchido se o relato bater com um serviço do catálogo — nunca bloqueie ou recuse agendar por falta de serviço.
 - Converta datas relativas (hoje, amanhã, sexta, essa/proxima semana) para YYYY-MM-DD usando SEMPRE a data atual informada no início da mensagem do sistema. Considere a semana iniciando na segunda-feira: "essa semana" vai de segunda a domingo da semana atual, "proxima semana" e a semana seguinte. Eh melhor confirmar o dia com o cliente caso haja qualquer dúvida sobre a data.
 - Quando MENCIONAR uma data na sua resposta ao cliente, use SEMPRE o formato brasileiro dd/mm/aaaa (ex.: 10/08/2026). O formato YYYY-MM-DD é usado APENAS no parâmetro `data` das ferramentas — nunca na mensagem que você escreve.
@@ -199,18 +201,23 @@ def _system_prompt() -> str:
     fds = agora.replace(hour=0, minute=0, second=0, microsecond=0)
     inicio_semana = fds - timedelta(days=agora.weekday())  # segunda-feira atual
     fim_semana = inicio_semana + timedelta(days=6)
+    proximos_dias = "\n".join(
+        f"- {(fds + timedelta(days=i)):%d/%m/%Y} = {_DIAS_SEMANA[(fds + timedelta(days=i)).weekday()]}"
+        for i in range(7)
+    )
     prefixo = (
-        f"Data e hora atuais ({cfg.fuso}): {agora:%d/%m/%Y %H:%M} "
-        f"({dia_semana}).\n"
-        f"HOJE é {dia_semana} ({agora:%d/%m/%Y}). "
-        f"A semana atual (segunda a domingo) vai de {inicio_semana:%d/%m} até {fim_semana:%d/%m}.\n"
-        f"Regra de datas: SEMPRE converta dias relativos usando ESTE contexto — "
-        f"hoje={agora:%d/%m/%Y} ({dia_semana}), amanhã={fds + timedelta(days=1):%d/%m/%Y}, "
-        f"depois de amanhã={fds + timedelta(days=2):%d/%m/%Y}. "
-        f"'essa semana' = {inicio_semana:%d/%m} a {fim_semana:%d/%m}; 'próxima semana' = "
-        f"{inicio_semana + timedelta(days=7):%d/%m} a {fim_semana + timedelta(days=7):%d/%m}. "
+        f"Data e hora atuais ({cfg.fuso}): {agora:%d/%m/%Y %H:%M} ({dia_semana}).\n"
+        f"HOJE é {dia_semana}, {agora:%d/%m/%Y}.\n"
+        f"Próximos dias (verifique SEMPRE nesta lista antes de falar qualquer data):\n{proximos_dias}\n"
+        f"Referências relativas: 'amanhã' = {(fds + timedelta(days=1)):%d/%m/%Y}, "
+        f"'depois de amanhã' = {(fds + timedelta(days=2)):%d/%m/%Y}. "
+        f"'essa semana' = dias de {inicio_semana:%d/%m} a {fim_semana:%d/%m}; "
+        f"'próxima semana' = {inicio_semana + timedelta(days=7):%d/%m} a {fim_semana + timedelta(days=7):%d/%m}. "
+        f"NUNCA invente disponibilidade: para saber se um dia tem vaga, use SEMPRE a ferramenta "
+        f"consultar_horarios_disponiveis (sem data = lista os próximos dias livres; com data = checa o dia). "
         f"Para as ferramentas, o parâmetro `data` é SEMPRE YYYY-MM-DD. "
-        f"Nas suas respostas ao cliente, escreva datas como dd/mm/aaaa (ex.: 10/08/2026)."
+        f"Nas suas respostas ao cliente, escreva datas como dd/mm/aaaa (ex.: 10/08/2026), "
+        f"SEMPRE acompanhadas do dia da semana."
     )
     # Remetente vem do contextvar (setado no pipeline antes do run) — mesmo
     # critério usado p/ montar o toolset em `responder`.
