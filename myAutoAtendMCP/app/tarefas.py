@@ -86,13 +86,13 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
     """Envia um lembrete e incrementa o contador.
 
     Usa o modelo de mensagem configurado no painel (com as variaveis {nome},
-    {servico}, {data} e {hora} preenchidas com os dados do agendamento). Sem
+    {servico} e {data} preenchidas com os dados do agendamento). Sem
     modelo configurado, cai para a geracao por IA (comportamento legado).
     """
     try:
         servico = db.get_servico(ag.servico_id) if ag.servico_id else None
         nome_servico = servico.nome if servico else (ag.descricao or "atendimento")
-        data, hora = data_e_hora_br(ag.inicio)
+        data, _ = data_e_hora_br(ag.inicio)
 
         config = db.get_lembrete_config()
         modelo = config.mensagem if stage == 0 else config.mensagem2
@@ -104,7 +104,6 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
                 "nome": ag.nome_cliente,
                 "servico": nome_servico,
                 "data": data,
-                "hora": hora,
             }.items():
                 mensagem = mensagem.replace("{" + chave + "}", str(valor))
         else:
@@ -120,19 +119,17 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
                 user = (
                     f"Cliente: {ag.nome_cliente}\n"
                     f"Servico: {nome_servico}\n"
-                    f"Data: {data}\n"
-                    f"Hora: {hora}\n\n"
+                    f"Data: {data}\n\n"
                     f"Escreva uma mensagem curta e cordial para recordar o cliente "
-                    f"sobre este agendamento, pedindo confirmacao."
+                    f"sobre este agendamento (o atendimento e por dia inteiro, sem horario), pedindo confirmacao."
                 )
             else:
                 user = (
                     f"Cliente: {ag.nome_cliente}\n"
                     f"Servico: {nome_servico}\n"
-                    f"Data: {data}\n"
-                    f"Hora: {hora}\n\n"
+                    f"Data: {data}\n\n"
                     f"Escreva uma mensagem curta e cordial reforçando o agendamento "
-                    f"de amanha, pedindo confirmacao."
+                    f"de amanha (o atendimento e por dia inteiro, sem horario), pedindo confirmacao."
                 )
 
             try:
@@ -230,19 +227,19 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
         return None
     servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     nome_servico = servico.nome if servico else (ag.descricao or f"serviço #{ag.servico_id}")
-    data, hora = data_e_hora_br(ag.inicio)
+    data, _ = data_e_hora_br(ag.inicio)
 
     if acao in ("remarcar", "cancelar"):
         motivo = payload.get("motivo") or "um imprevisto"
-        base = f"O dono teve um imprevisto ({motivo}) e não poderá atender no dia {data}. O cliente {ag.nome_cliente} tem \"{nome_servico}\" às {hora} (agendamento #{ag.id}). "
+        base = f"O dono teve um imprevisto ({motivo}) e não poderá atender no dia {data}. O cliente {ag.nome_cliente} tem \"{nome_servico}\" (agendamento #{ag.id}). "
         if acao == "cancelar":
             return base + "Esse agendamento JÁ FOI CANCELADO. Avise o cliente com delicadeza, peça desculpas e ofereça ajuda para marcar uma nova data."
         return base + "Avise o cliente, peça desculpas e ofereça remarcação para outra data."
     if acao == "cancelado":
-        return f"O dono cancelou o agendamento #{ag.id} de {ag.nome_cliente}: \"{nome_servico}\" do dia {data} às {hora}. JÁ CANCELADO. Avise o cliente com delicadeza."
+        return f"O dono cancelou o agendamento #{ag.id} de {ag.nome_cliente}: \"{nome_servico}\" do dia {data}. JÁ CANCELADO. Avise o cliente com delicadeza."
     if acao == "reagendado":
         antes = payload.get("inicio_anterior") or ""
-        data_ant, hora_ant = data_e_hora_br(antes)
-        de = f"que era no dia {data_ant} às {hora_ant} " if antes else ""
-        return f"O dono remarcou o agendamento #{ag.id} de {ag.nome_cliente} (\"{nome_servico}\") {de}para o dia {data} às {hora}. JÁ REMARCADO. Avise o cliente."
+        data_ant, _ = data_e_hora_br(antes)
+        de = f"que era no dia {data_ant} " if antes else ""
+        return f"O dono remarcou o agendamento #{ag.id} de {ag.nome_cliente} (\"{nome_servico}\") {de}para o dia {data}. JÁ REMARCADO. Avise o cliente."
     return None

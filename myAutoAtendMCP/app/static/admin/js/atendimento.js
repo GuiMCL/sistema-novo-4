@@ -197,7 +197,7 @@ class Atendimento {
       agEl.innerHTML = 'Nenhum agendamento.';
     } else {
       agEl.innerHTML = ags.map(a => {
-        const dh = (a.inicio || '').replace('T', ' ');
+        const dh = (a.inicio || '').split('T')[0];
         return `<div class="ag-item">
           <div class="ag-servico">${a.servico_nome || '—'}</div>
           <div class="ag-data">${dh} ${a.vaga_nome ? '· ' + a.vaga_nome : ''}</div>

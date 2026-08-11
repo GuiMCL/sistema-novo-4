@@ -230,14 +230,13 @@ def api_criar_agendamento(
     descricao: str = Form(""),
     telefone_cliente: str = Form(...),
     nome_cliente: str = Form(...),
-    inicio: str = Form(...),
+    data: str = Form(...),
     veiculo: str = Form(""),
     placa: str = Form(""),
     observacoes: str = Form(""),
 ):
+    from datetime import date, datetime, time
     from .phone import normalizar
-    from .tools import DURACAO_PADRAO
-    from datetime import timedelta
 
     usuario = auth.login_required(request)
     servico = db.get_servico(servico_id) if servico_id else None
@@ -245,17 +244,22 @@ def api_criar_agendamento(
         raise HTTPException(status_code=400, detail="Informe o sintoma/descrição ou selecione um serviço.")
 
     try:
-        dt_inicio = datetime.fromisoformat(inicio)
+        dia = date.fromisoformat(data)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Horário inválido.")
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
 
-    fim = (dt_inicio + timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)).isoformat(timespec="minutes")
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
+
     ag = db.criar_agendamento(
         servico_id=servico.id if servico else None,
         telefone_cliente=normalizar(telefone_cliente) or telefone_cliente,
         nome_cliente=nome_cliente.strip(),
         inicio=dt_inicio.isoformat(timespec="minutes"),
-        fim=fim,
+        fim=dt_fim.isoformat(timespec="minutes"),
         observacoes=observacoes.strip(),
         veiculo=veiculo.strip(),
         placa=placa.strip().upper(),
@@ -263,7 +267,7 @@ def api_criar_agendamento(
         descricao=descricao.strip(),
     )
     if not ag:
-        raise HTTPException(status_code=409, detail="Sem vagas disponíveis no horário.")
+        raise HTTPException(status_code=409, detail="Sem vagas disponíveis nesta data.")
     return {"ok": True, "agendamento": db.como_dict(ag)}
 
 

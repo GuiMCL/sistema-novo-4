@@ -891,7 +891,7 @@ def novo_agendamento(
     descricao: str = Form(""),
     nome_cliente: str = Form(...),
     telefone_cliente: str = Form(...),
-    inicio: str = Form(...),
+    data: str = Form(...),
     observacoes: str = Form(""),
     veiculo: str = Form(""),
     placa: str = Form(""),
@@ -908,16 +908,20 @@ def novo_agendamento(
     if not servico and not descricao.strip():
         raise HTTPException(status_code=400, detail="Informe o sintoma/descrição ou selecione um serviço.")
     try:
-        dt_inicio = datetime.fromisoformat(inicio)
+        dia = date.fromisoformat(data)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Horário inválido.")
-    fim = (dt_inicio + timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)).isoformat(timespec="minutes")
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
     ag = db.criar_agendamento(
         servico_id=servico.id if servico else None,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome,
         inicio=dt_inicio.isoformat(timespec="minutes"),
-        fim=fim,
+        fim=dt_fim.isoformat(timespec="minutes"),
         observacoes=observacoes.strip(),
         veiculo=veiculo.strip(),
         placa=placa.strip().upper(),
@@ -926,7 +930,7 @@ def novo_agendamento(
         descricao=descricao.strip(),
     )
     if not ag:
-        raise HTTPException(status_code=409, detail="Sem vagas disponíveis no horário.")
+        raise HTTPException(status_code=409, detail="Sem vagas disponíveis nesta data.")
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -953,21 +957,23 @@ def reagendar_agendamento(
     agendamento_id: int,
     request: Request,
     _: db.Usuario = Depends(auth.admin_required),
-    novo_inicio: str = Form(...),
+    nova_data: str = Form(...),
     avisar_cliente: str = Form(""),
 ):
     ag = db.get_agendamento(agendamento_id)
     if not ag:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
-    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
-        dt_inicio = datetime.fromisoformat(novo_inicio)
+        dia = date.fromisoformat(nova_data)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Horário inválido.")
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
     inicio_anterior = ag.inicio
-    dur = servico.duracao_min if servico else DURACAO_PADRAO
-    novo_fim = (dt_inicio + timedelta(minutes=dur)).isoformat(timespec="minutes")
-    ok = db.reagendar_agendamento(agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim)
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
+    ok = db.reagendar_agendamento(agendamento_id, dt_inicio.isoformat(timespec="minutes"), dt_fim.isoformat(timespec="minutes"))
     if ok and avisar_cliente and _avisar_cliente_permitido(ag):
         db.criar_aviso_cliente(
             db.get_agendamento(agendamento_id), "reagendado",

@@ -22,14 +22,14 @@ if (modal) {
 
   function montar(d) {
     const nome = esc(d.nome || '?');
-    const quando = d.inicio ? esc(String(d.inicio).replace('T', ' ')) : '—';
+    const quando = d.inicio ? esc(String(d.inicio).split('T')[0]) : '—';
     const extra = [];
     if (!__CAL__.apenas_ativos) {
       extra.push(`
         <form class="agd-reagendar" method="post" action="/admin/agendamento/${esc(d.id)}/reagendar">
-          <label>Reagendar</label>
+          <label>Reagendar para outro dia</label>
           <div class="row" style="gap:6px;align-items:center">
-            <input type="datetime-local" name="novo_inicio" value="${esc(d.inicio)}" required>
+            <input type="date" name="nova_data" value="${esc(d.inicio ? String(d.inicio).split('T')[0] : '')}" required>
             <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança">
               <input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente
             </label>

@@ -44,6 +44,21 @@ def _nome_generico(nome: str | None) -> bool:
     return not nome or nome.strip().lower() in _NOMES_GENERICOS
 
 
+def _data_sem_horario(iso: str) -> str:
+    """Extrai apenas a data (YYYY-MM-DD) de um início ISO, sem hora."""
+    if not iso:
+        return ""
+    return iso.split("T")[0]
+
+
+def _agendamento_dict(a) -> dict:
+    """Dict do agendamento para o modelo — SEMPRE sem horário de relógio."""
+    d = db.como_dict(a)
+    d["inicio"] = _data_sem_horario(a.inicio)
+    d["fim"] = _data_sem_horario(a.fim)
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Tools ABERTAS
 # ---------------------------------------------------------------------------
@@ -214,7 +229,7 @@ def agendar(
     if ag.vaga_id:
         v = db.get_vaga(ag.vaga_id)
         vaga_nome = v.nome if v else ""
-    resultado = db.como_dict(ag)
+    resultado = _agendamento_dict(ag)
     resultado["vaga_nome"] = vaga_nome
     return {"ok": True, "agendamento": resultado}
 
@@ -225,7 +240,7 @@ def meus_agendamentos(telefone_solicitante: str | None = None) -> list[dict]:
     tel = auth.requester(telefone_solicitante)
     if not tel:
         return [auth.NEGADO_SEM_SOLICITANTE]
-    return [db.como_dict(a) for a in db.agendamentos_do_telefone(tel)]
+    return [_agendamento_dict(a) for a in db.agendamentos_do_telefone(tel)]
 
 
 # ---------------------------------------------------------------------------
@@ -245,33 +260,35 @@ def _enfileirar_aviso_cliente(ag, acao: str, telefone_solicitante: str | None, i
 @mcp.tool()
 def reagendar(
     agendamento_id: int,
-    novo_inicio: str,
+    nova_data: str,
     avisar_cliente: bool = False,
     telefone_solicitante: str | None = None,
 ) -> dict:
-    """Remarca um agendamento."""
+    """Remarca um agendamento para outro DIA. `nova_data` no formato YYYY-MM-DD (sem horário)."""
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
     ag = db.get_agendamento(agendamento_id)
     if not ag:
         return {"erro": "Agendamento não encontrado."}
     inicio_anterior = ag.inicio
-    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
-        dt_inicio = datetime.fromisoformat(novo_inicio)
+        dia = date.fromisoformat(nova_data)
     except ValueError:
-        return {"erro": "Horário inválido. Use YYYY-MM-DDTHH:MM."}
-    if dt_inicio < _agora_local():
-        return {"erro": "Não é possível remarcar para um horário no passado."}
-    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
-    if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
-        return {"erro": "Fora do horário de funcionamento."}
+        return {"erro": "Data inválida. Use YYYY-MM-DD."}
+    if dia < _agora_local().date():
+        return {"erro": "Não é possível remarcar para uma data passada."}
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        return {"erro": "Sem expediente nesta data."}
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
+    novo_inicio = dt_inicio.isoformat(timespec="minutes")
     novo_fim = dt_fim.isoformat(timespec="minutes")
-    if not db.reagendar_agendamento(agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim):
-        return {"erro": "Novo horário indisponível (todas as vagas ocupadas)."}
+    if not db.reagendar_agendamento(agendamento_id, novo_inicio, novo_fim):
+        return {"erro": "Nova data indisponível (todas as vagas ocupadas)."}
     atualizado = db.get_agendamento(agendamento_id)
     notificacoes.notificar_dono("reagendado", atualizado, auth.requester(telefone_solicitante))
-    resultado = {"ok": True, "agendamento": db.como_dict(atualizado)}
+    resultado = {"ok": True, "agendamento": _agendamento_dict(atualizado)}
     if avisar_cliente and _enfileirar_aviso_cliente(atualizado, "reagendado", telefone_solicitante, inicio_anterior=inicio_anterior):
         resultado["cliente_sera_avisado"] = True
     return resultado
@@ -335,17 +352,6 @@ def abrir_data(data: str, data_fim: str | None = None, telefone_solicitante: str
 
 
 @mcp.tool()
-def bloquear_horario(data: str, inicio: str, fim: str, motivo: str = "", data_fim: str | None = None, telefone_solicitante: str | None = None) -> dict:
-    """[DONO] Bloqueia um intervalo de horas."""
-    if not auth.eh_dono(telefone_solicitante):
-        return auth.NEGADO_DONO
-    if erro := _validar_periodo(data, data_fim):
-        return erro
-    b = db.criar_bloqueio(data=data, inicio=inicio, fim=fim, motivo=motivo, data_fim=data_fim)
-    return {"ok": True, "bloqueio": db.como_dict(b)}
-
-
-@mcp.tool()
 def remanejar_dia(data: str, acao: str = "remarcar", motivo: str = "", telefone_solicitante: str | None = None) -> dict:
     """[DONO] Fecha o dia e contata clientes."""
     if not auth.eh_dono(telefone_solicitante):
@@ -396,7 +402,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
         ultimo = agendamentos[-1]
         serv = db.get_servico(ultimo.servico_id) if ultimo.servico_id else None
         nome_serv = serv.nome if serv else (ultimo.descricao or "")
-        dt = (ultimo.inicio or "").replace("T", " ") if ultimo.inicio else ""
+        dt = (ultimo.inicio or "").split("T")[0] if ultimo.inicio else ""
         info_ag = f" | {nome_serv} {dt}" if nome_serv else ""
     tel_fmt = formatar_internacional(tel) or tel
 
@@ -490,7 +496,7 @@ def ver_agenda_completa(telefone_solicitante: str | None = None) -> dict:
         return auth.NEGADO_DONO
     ags = []
     for a in db.listar_agendamentos():
-        d = db.como_dict(a)
+        d = _agendamento_dict(a)
         if a.vaga_id:
             v = db.get_vaga(a.vaga_id)
             d["vaga_nome"] = v.nome if v else ""

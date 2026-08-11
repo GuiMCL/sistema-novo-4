@@ -218,7 +218,7 @@ class LembreteConfig(SQLModel, table=True):
     # Segundo estágio (DISPARO 2): exemplo 24h antes
     horas_antes2: int = 24
     mensagem2: str = (
-        "Ola {nome}! Passando para confirmar seu horario de amanha as {hora} para {servico}. "
+        "Ola {nome}! Passando para confirmar seu atendimento de amanha para {servico}. "
         "Para adiantar seu cadastro, poderia me informar seu Nome Completo, CPF e Telefone? "
         "Fico no aguardo!"
     )

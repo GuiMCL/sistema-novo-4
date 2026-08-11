@@ -21,11 +21,10 @@
       <div class="cal-dia{% if dia.fora %} is-fora{% endif %}{% if dia.hoje %} is-hoje{% endif %}" role="gridcell">
         <span class="cal-num">{{ dia.dia }}</span>
         <div class="cal-itens">
-          {% if dia.agendamentos %}
+            {% if dia.agendamentos %}
             {% for a in dia.agendamentos %}
             <button type="button" class="cal-chip" data-id="{{ a.id }}" data-telefone="{{ a.telefone_cliente }}"
-                    title="{{ a.nome_cliente }} · {{ a.inicio.split('T')[1][:5] }}">
-              <span class="cal-chip-t">{{ a.inicio.split('T')[1][:5] }}</span>
+                    title="{{ a.nome_cliente }}">
               <span class="cal-chip-n">{{ a.nome_cliente or '?' }}</span>
             </button>
             {% endfor %}
@@ -71,7 +70,8 @@
           <label>Sintoma/Descrição</label>
           <input name="descricao" id="agm-descricao" placeholder="Ex.: ruído no pneu dianteiro direito" required>
         </div>
-        <div><label>Data</label><input id="agm-data" type="date" required></div>
+        <div>      <label>Data</label>
+      <input name="data" id="agm-data" type="date" required></div>
       </div>
       <div>
         <label>Serviço (opcional) <span style="text-transform:none;font-weight:400">— preencha se souber o serviço exato</span></label>
@@ -83,15 +83,7 @@
         </select>
       </div>
 
-      <label>Horário</label>
-      <div class="agm-slots" id="agm-slots" aria-live="polite">
-        <p class="agm-slots-dica">Escolha a data para ver os horários.</p>
-      </div>
-      <div class="agm-legenda" id="agm-legenda" hidden>
-        <span class="agm-leg-item"><span class="agm-leg-quad livre"></span>Livre</span>
-        <span class="agm-leg-item"><span class="agm-leg-quad ocupado"></span>Ocupado</span>
-      </div>
-      <input type="hidden" name="inicio" id="agm-inicio">
+      <p class="agm-slots-dica">O atendimento é por DIA INTEIRO — o cliente ocupa uma vaga (box) o dia todo.</p>
 
       <div class="row">
         <div><label>Veículo <span style="text-transform:none;font-weight:400">(opcional)</span></label><input name="veiculo" placeholder="Ex.: Fiat Uno"></div>

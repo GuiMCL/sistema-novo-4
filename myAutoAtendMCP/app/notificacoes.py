@@ -43,9 +43,9 @@ def data_e_hora_br(inicio: str) -> tuple[str, str]:
 _TELEFONE_PLACEHOLDER = "5500000000000"
 
 _TEMPLATES = {
-    "agendado": "*Novo agendamento*\n{cliente} ({tel})\n{servico} - {data} as {hora}",
-    "reagendado": "*Reagendamento*\n{cliente} ({tel})\n{servico} - agora {data} as {hora}",
-    "cancelado": "*Cancelamento*\n{cliente} ({tel})\n{servico} - era {data} as {hora}",
+    "agendado": "*Novo agendamento*\n{cliente} ({tel})\n{servico} - {data}",
+    "reagendado": "*Reagendamento*\n{cliente} ({tel})\n{servico} - agora {data}",
+    "cancelado": "*Cancelamento*\n{cliente} ({tel})\n{servico} - era {data}",
 }
 
 
@@ -62,13 +62,12 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
             return  # ação do próprio dono — sem eco
 
         servico = db.get_servico(agendamento.servico_id) if agendamento.servico_id else None
-        data, hora = data_e_hora_br(agendamento.inicio)
+        data, _ = data_e_hora_br(agendamento.inicio)
         texto = _TEMPLATES[evento].format(
             cliente=agendamento.nome_cliente,
             tel=agendamento.telefone_cliente,
             servico=servico.nome if servico else (agendamento.descricao or f"serviço #{agendamento.servico_id}"),
             data=data,
-            hora=hora,
         )
         evolution.enviar_texto_sync(re.sub(r"\D", "", dono), texto)
     except Exception:  # noqa: BLE001 — aviso é melhor-esforço

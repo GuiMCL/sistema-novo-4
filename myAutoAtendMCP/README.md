@@ -79,7 +79,7 @@ Abertas: `listar_servicos`, `consultar_horarios_disponiveis`, `agendar`,
 
 Dono ou próprio cliente: `reagendar`, `cancelar`.
 
-Apenas dono: `fechar_data`, `abrir_data`, `bloquear_horario`, `criar_servico`,
+Apenas dono: `fechar_data`, `abrir_data`, `remanejar_dia`, `criar_servico`,
 `editar_servico`, `ver_agenda_completa`.
 
 ## Modelo de segurança (importante)
