@@ -15,11 +15,29 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 from . import db, evolution
 from .phone import mesmo_numero, normalizar
 
 log = logging.getLogger("notificacoes")
+
+
+def data_e_hora_br(inicio: str) -> tuple[str, str]:
+    """(dd/mm/aaaa, HH:MM) a partir do inicio ISO YYYY-MM-DDTHH:MM.
+
+    Tolerante a início vazio ou sem horário — nunca quebra o template."""
+    if not inicio:
+        return "", ""
+    try:
+        dt = datetime.fromisoformat(inicio)
+        return dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M")
+    except ValueError:
+        parte = inicio.split("T")[0]
+        try:
+            return datetime.fromisoformat(parte).strftime("%d/%m/%Y"), ""
+        except ValueError:
+            return parte, ""
 
 # Placeholder do compose enquanto o dono não configura o telefone no painel.
 _TELEFONE_PLACEHOLDER = "5500000000000"
@@ -44,7 +62,7 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
             return  # ação do próprio dono — sem eco
 
         servico = db.get_servico(agendamento.servico_id) if agendamento.servico_id else None
-        data, hora = (agendamento.inicio.split("T") + [""])[:2]
+        data, hora = data_e_hora_br(agendamento.inicio)
         texto = _TEMPLATES[evento].format(
             cliente=agendamento.nome_cliente,
             tel=agendamento.telefone_cliente,

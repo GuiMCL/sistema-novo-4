@@ -12,6 +12,7 @@ import logging
 import random
 
 from . import agente, db, ia, whatsapp
+from .notificacoes import data_e_hora_br
 from .tools import _agora_local
 
 log = logging.getLogger("tarefas")
@@ -86,7 +87,7 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
     try:
         servico = db.get_servico(ag.servico_id)
         nome_servico = servico.nome if servico else "servico"
-        data, hora = (ag.inicio.split("T") + [""])[:2]
+        data, hora = data_e_hora_br(ag.inicio)
 
         system = (
             "Voce e um assistente de uma oficina mecânica enviando lembretes "
@@ -207,7 +208,7 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
         return None
     servico = db.get_servico(ag.servico_id)
     nome_servico = servico.nome if servico else f"serviço #{ag.servico_id}"
-    data, hora = (ag.inicio.split("T") + [""])[:2]
+    data, hora = data_e_hora_br(ag.inicio)
 
     if acao in ("remarcar", "cancelar"):
         motivo = payload.get("motivo") or "um imprevisto"
@@ -219,7 +220,7 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
         return f"O dono cancelou o agendamento #{ag.id} de {ag.nome_cliente}: \"{nome_servico}\" do dia {data} às {hora}. JÁ CANCELADO. Avise o cliente com delicadeza."
     if acao == "reagendado":
         antes = payload.get("inicio_anterior") or ""
-        data_ant, hora_ant = (antes.split("T") + [""])[:2]
+        data_ant, hora_ant = data_e_hora_br(antes)
         de = f"que era no dia {data_ant} às {hora_ant} " if antes else ""
         return f"O dono remarcou o agendamento #{ag.id} de {ag.nome_cliente} (\"{nome_servico}\") {de}para o dia {data} às {hora}. JÁ REMARCADO. Avise o cliente."
     return None
