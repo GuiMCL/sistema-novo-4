@@ -17,6 +17,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, evolution, tarefas
@@ -28,6 +29,16 @@ from .tools import mcp
 from .whatsapp import router as whatsapp_router
 
 log = logging.getLogger("main")
+
+
+class _NoCacheJS(StaticFiles):
+    """Sempre revalida arquivos JS no navegador (evita cache de código velho)."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        if isinstance(response, Response) and response.path.endswith(".js"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
 
 # App ASGI do MCP
 mcp_app = mcp.streamable_http_app()
@@ -84,7 +95,7 @@ app.include_router(atendimento_router)
 app.include_router(whatsapp_router)
 app.include_router(quote_router)
 app.mount("/mcp", SolicitanteMiddleware(mcp_app))
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", _NoCacheJS(directory="app/static"), name="static")
 
 
 @app.get("/")
