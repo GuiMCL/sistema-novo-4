@@ -65,21 +65,67 @@ def listar_vagas() -> list[dict]:
     return [db.como_dict(v) for v in db.listar_vagas()]
 
 
-@mcp.tool()
-def consultar_horarios_disponiveis(data: str, servico_id: int | None = None) -> dict:
-    """Lista horários livres em uma data (formato YYYY-MM-DD).
+def _vagas_ocupadas_em(dia: date) -> int:
+    """Nº de agendamentos vigentes que ocupam vaga em `dia` (agendamento é por DIA INTEIRO)."""
+    prefixo = dia.isoformat()
+    n = 0
+    for a in db.listar_agendamentos():
+        if a.inicio[:10] == prefixo and a.status in db.STATUS_VIGENTES:
+            n += 1
+    return n
 
-    `servico_id` é opcional: quando informado, o passo usa a duração do serviço;
-    sem serviço, usa a duração padrão. A capacidade é definida pelo número de
-    vagas/boxes: vários horários podem estar ocupados no mesmo momento se todas
-    as vagas estiverem preenchidas. Retorna também quantas vagas estão livres
-    em cada horário.
+
+@mcp.tool()
+def consultar_horarios_disponiveis(
+    data: str = "",
+    servico_id: int | None = None,
+    quantidade_dias: int = 14,
+) -> dict:
+    """Verifica disponibilidade de agendamento.
+
+    O agendamento é por DIA INTEIRO (o cliente ocupa uma vaga/box o dia todo),
+    então a disponibilidade é por dia, não por horário de relógio.
+
+    - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
+      `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
+    - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre, quantas
+      vagas sobram e os horários em que há capacidade.
+
+    `servico_id` é opcional: ajusta a duração do passo dos horários, mas NÃO
+    muda a capacidade (definida pelo nº de vagas/boxes).
     """
     servico = None
     if servico_id is not None:
         servico = db.get_servico(servico_id)
         if not servico:
             return {"erro": "Serviço não encontrado."}
+
+    vagas = db.listar_vagas()
+    total_vagas = len(vagas) or 1
+    nome_servico = servico.nome if servico else ""
+
+    # Modo 1: sem data → lista os próximos dias disponíveis
+    if not data.strip():
+        agora = _agora_local()
+        dias_disponiveis: list[dict] = []
+        for i in range(max(1, quantidade_dias)):
+            candidato = (agora.date() + timedelta(days=i)).isoformat()
+            intervalos = db.horarios_do_dia(date.fromisoformat(candidato).weekday())
+            if not intervalos:
+                continue
+            ini = f"{candidato}T{intervalos[0].inicio}"
+            fim = f"{candidato}T{intervalos[-1].fim}"
+            if db.horario_disponivel(ini, fim):
+                ocupadas = _vagas_ocupadas_em(date.fromisoformat(candidato))
+                dias_disponiveis.append(
+                    {
+                        "data": candidato,
+                        "dia_semana": ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")[date.fromisoformat(candidato).weekday()],
+                        "vagas_livres": max(0, total_vagas - ocupadas),
+                    }
+                )
+        return {"data": "", "servico": nome_servico, "dias_disponiveis": dias_disponiveis, "total_vagas": total_vagas}
+
     try:
         dia = date.fromisoformat(data)
     except ValueError:
@@ -87,10 +133,7 @@ def consultar_horarios_disponiveis(data: str, servico_id: int | None = None) -> 
 
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
-        return {"data": data, "servico": servico.nome if servico else "", "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
-
-    vagas = db.listar_vagas()
-    total_vagas = len(vagas) or 1
+        return {"data": data, "servico": nome_servico, "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
 
     agora = _agora_local()
     livres: list[dict] = []
@@ -116,7 +159,14 @@ def consultar_horarios_disponiveis(data: str, servico_id: int | None = None) -> 
                     livres.append({"horario": atual.strftime("%H:%M"), "vagas": vagas_livres})
             atual += passo
 
-    return {"data": data, "servico": servico.nome if servico else "", "horarios": livres, "total_vagas": total_vagas}
+    return {
+        "data": data,
+        "servico": nome_servico,
+        "dia_livre": len(livres) > 0,
+        "vagas_livres": max(0, total_vagas - _vagas_ocupadas_em(dia)),
+        "horarios": livres,
+        "total_vagas": total_vagas,
+    }
 
 
 @mcp.tool()
