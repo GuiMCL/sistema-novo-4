@@ -88,11 +88,11 @@ def consultar_horarios_disponiveis(
 
     - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
       `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
-    - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre, quantas
-      vagas sobram e os horários em que há capacidade.
+    - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre e
+      quantas vagas/boxes sobram.
 
-    `servico_id` é opcional: ajusta a duração do passo dos horários, mas NÃO
-    muda a capacidade (definida pelo nº de vagas/boxes).
+    `servico_id` é opcional e NÃO muda a capacidade (definida pelo nº de
+    vagas/boxes).
     """
     servico = None
     if servico_id is not None:
@@ -133,38 +133,14 @@ def consultar_horarios_disponiveis(
 
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
-        return {"data": data, "servico": nome_servico, "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
+        return {"data": data, "servico": nome_servico, "vagas_livres": 0, "total_vagas": total_vagas, "aviso": "Sem expediente neste dia (fechado)."}
 
-    agora = _agora_local()
-    livres: list[dict] = []
-    passo = timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
-    for janela in intervalos:
-        atual = datetime.fromisoformat(f"{data}T{janela.inicio}")
-        limite = datetime.fromisoformat(f"{data}T{janela.fim}")
-        while atual + passo <= limite:
-            ini = atual.isoformat(timespec="minutes")
-            fim = (atual + passo).isoformat(timespec="minutes")
-            if atual >= agora:
-                # Conta ocupados no período
-                ocupados = 0
-                for a in db.listar_agendamentos():
-                    if a.status not in db.STATUS_VIGENTES:
-                        continue
-                    a_ini = datetime.fromisoformat(a.inicio)
-                    a_fim = datetime.fromisoformat(a.fim)
-                    if a_ini < datetime.fromisoformat(fim) and datetime.fromisoformat(ini) < a_fim:
-                        ocupados += 1
-                vagas_livres = max(0, total_vagas - ocupados)
-                if vagas_livres > 0:
-                    livres.append({"horario": atual.strftime("%H:%M"), "vagas": vagas_livres})
-            atual += passo
-
+    vagas_livres = max(0, total_vagas - _vagas_ocupadas_em(dia))
     return {
         "data": data,
         "servico": nome_servico,
-        "dia_livre": len(livres) > 0,
-        "vagas_livres": max(0, total_vagas - _vagas_ocupadas_em(dia)),
-        "horarios": livres,
+        "dia_livre": vagas_livres > 0,
+        "vagas_livres": vagas_livres,
         "total_vagas": total_vagas,
     }
 
