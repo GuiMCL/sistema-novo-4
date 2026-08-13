@@ -111,17 +111,22 @@ def consultar_horarios_disponiveis(
         dias_disponiveis: list[dict] = []
         for i in range(max(1, quantidade_dias)):
             candidato = (agora.date() + timedelta(days=i)).isoformat()
-            intervalos = db.horarios_do_dia(date.fromisoformat(candidato).weekday())
+            dia = date.fromisoformat(candidato)
+            # Regra de expediente: dia sem funcionamento OU hoje já encerrado
+            # NÃO pode ser agendado — nunca sugira essas datas.
+            if not db.pode_agendar_no_dia(dia, agora):
+                continue
+            intervalos = db.horarios_do_dia(dia.weekday())
             if not intervalos:
                 continue
             ini = f"{candidato}T{intervalos[0].inicio}"
             fim = f"{candidato}T{intervalos[-1].fim}"
             if db.horario_disponivel(ini, fim):
-                ocupadas = _vagas_ocupadas_em(date.fromisoformat(candidato))
+                ocupadas = _vagas_ocupadas_em(dia)
                 dias_disponiveis.append(
                     {
                         "data": candidato,
-                        "dia_semana": ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")[date.fromisoformat(candidato).weekday()],
+                        "dia_semana": ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")[dia.weekday()],
                         "vagas_livres": max(0, total_vagas - ocupadas),
                     }
                 )
@@ -137,6 +142,10 @@ def consultar_horarios_disponiveis(
         return {"data": data, "servico": nome_servico, "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
 
     agora = _agora_local()
+    pode_agendar = db.pode_agendar_no_dia(dia, agora)
+    aviso = ""
+    if not pode_agendar and dia == agora.date():
+        aviso = "Hoje já encerrou o expediente — não é possível agendar para hoje. Ofereça um dos próximos dias com vaga."
     livres: list[dict] = []
     passo = timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
     for janela in intervalos:
@@ -164,6 +173,8 @@ def consultar_horarios_disponiveis(
         "data": data,
         "servico": nome_servico,
         "dia_livre": len(livres) > 0,
+        "pode_agendar": pode_agendar,
+        "aviso": aviso,
         "vagas_livres": max(0, total_vagas - _vagas_ocupadas_em(dia)),
         "horarios": livres,
         "total_vagas": total_vagas,
@@ -178,6 +189,7 @@ def agendar(
     veiculo: str = "",
     placa: str = "",
     observacoes: str = "",
+    confirmar_existente: bool = False,
     telefone_solicitante: str | None = None,
 ) -> dict:
     """Agenda um serviço para uma data. `data` no formato YYYY-MM-DD.
@@ -185,6 +197,10 @@ def agendar(
 
     Para oficina: informe `veiculo` (modelo do carro) e `placa` se o cliente
     mencionar. O telefone do cliente é o do solicitante (injetado pelo pipeline).
+
+    Se o cliente JÁ TIVER um agendamento ativo, a tool devolve um aviso — só
+    prossiga passando `confirmar_existente=true` com confirmação EXPLÍCITA do
+    cliente de que ele quer um NOVO atendimento (nunca para "sintomas novos").
     """
     tel = auth.requester(telefone_solicitante)
     if not tel:
@@ -198,8 +214,53 @@ def agendar(
         dia = date.fromisoformat(data)
     except ValueError:
         return {"erro": "Data inválida. Use YYYY-MM-DD."}
-    if dia < _agora_local().date():
+
+    agora = _agora_local()
+    if dia < agora.date():
         return {"erro": "Não é possível agendar para uma data passada."}
+    if not db.pode_agendar_no_dia(dia, agora):
+        if dia == agora.date():
+            return {
+                "erro": "Hoje não é mais possível agendar: o expediente já encerrou. "
+                "Consulte consultar_horarios_disponiveis (sem data) e ofereça o próximo dia com vaga."
+            }
+        return {"erro": "Sem expediente nesta data (fechada)."}
+    if db.dia_bloqueado(dia):
+        return {"erro": "Sem expediente nesta data (fechada por bloqueio)."}
+
+    # Defesa contra agendamento duplicado: o cliente já tem agendamento(s)
+    # ativo(s). Sintomas novos NÃO são novo agendamento — só avança com
+    # confirmação explícita (confirmar_existente) de um novo atendimento.
+    existentes = db.agendamentos_do_telefone(tel)
+    existentes_vigentes = [a for a in existentes if a.status in db.STATUS_VIGENTES]
+    if existentes_vigentes:
+        if any(a.inicio.startswith(dia.isoformat()) for a in existentes_vigentes):
+            return {
+                "erro": "Este cliente já tem um agendamento ATIVO nesta mesma data. "
+                "Não crie outro — se o cliente trouxe sintomas/detalhes novos, registre em "
+                "atualizar_observacoes no agendamento existente."
+            }
+        if not confirmar_existente:
+            return {
+                "aviso": "Este cliente JÁ TEM um agendamento ativo. Antes de criar outro, "
+                "confirme com o cliente se ele quer REALMENTE um novo atendimento (serviço e "
+                "dia diferentes). Somente com confirmação explícita chame agendar novamente "
+                "com confirmar_existente=true. Sintomas novos do mesmo carro não geram novo agendamento.",
+                "agendamentos_existentes": [
+                    {
+                        "id": a.id,
+                        "data": a.inicio[:10],
+                        "servico_id": a.servico_id,
+                        "status": a.status,
+                        "veiculo": a.veiculo,
+                        "placa": a.placa,
+                        "observacoes": a.observacoes,
+                    }
+                    for a in existentes_vigentes
+                ],
+                "agendamento_novo": {"servico_id": servico_id, "data": data},
+            }
+
     # Usa o horário de funcionamento do dia para definir inicio/fim
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
@@ -308,6 +369,27 @@ def cancelar(
     if avisar_cliente and _enfileirar_aviso_cliente(ag, "cancelado", telefone_solicitante):
         resultado["cliente_sera_avisado"] = True
     return resultado
+
+
+@mcp.tool()
+def atualizar_observacoes(
+    agendamento_id: int,
+    texto: str,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Acrescenta observações (sintomas, detalhes, preferências) a um agendamento ativo.
+
+    Use quando o cliente já tem um agendamento e traz uma informação NOVA sobre
+    ele (ex.: "está vazando óleo", "o ar não gela") — em vez de criar um novo
+    agendamento, anexe o relato ao atendimento atual para a equipe avaliar.
+    Só o dono ou o próprio cliente do agendamento podem alterar.
+    """
+    if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
+        return auth.NEGADO_PROPRIO
+    ag = db.atualizar_observacoes(agendamento_id, texto)
+    if not ag:
+        return {"erro": "Agendamento não encontrado ou já cancelado."}
+    return {"ok": True, "agendamento": db.como_dict(ag)}
 
 
 # ---------------------------------------------------------------------------

@@ -77,10 +77,21 @@ Dockerfile · requirements.txt
 Abertas: `listar_servicos`, `consultar_horarios_disponiveis`, `agendar`,
 `meus_agendamentos`.
 
-Dono ou próprio cliente: `reagendar`, `cancelar`.
+Dono ou próprio cliente: `reagendar`, `cancelar`, `atualizar_observacoes`
+(anexa sintomas/detalhes a um agendamento existente — evita criar agendamento
+novo por causa de informação extra).
 
 Apenas dono: `fechar_data`, `abrir_data`, `bloquear_horario`, `criar_servico`,
 `editar_servico`, `ver_agenda_completa`.
+
+## Regras de expediente (backend)
+
+- `agendar` e `consultar_horarios_disponiveis` rejeitam HOJE depois do
+  encerramento do último intervalo de funcionamento do dia (fuso da Config);
+  dias bloqueados e dias sem expediente também são rejeitados. A IA nunca
+  decide isso — a regra vive em `db.pode_agendar_no_dia`/`db.dia_bloqueado`.
+- `agendar` devolve um aviso se o cliente já tem agendamento ativo: só cria
+  outro com `confirmar_existente=true` (confirmação explícita do cliente).
 
 ## Modelo de segurança (importante)
 

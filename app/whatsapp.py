@@ -133,7 +133,13 @@ async def _base64_da_mensagem(data: dict, tipo: str) -> tuple[str | None, str | 
 
 
 def _agendar_lote(remote_jid: str, texto: str) -> None:
-    _buffers.setdefault(remote_jid, []).append(texto)
+    _buffers.setdefault(remote_jid, [])
+    # Entrega duplicada do webhook (retry/duplicidade) manda a MESMA mensagem
+    # duas vezes — dentro da janela de debounce a cópia exata é ignorada para
+    # não gerar resposta duplicada nem agendamento duplicado.
+    if _buffers[remote_jid] and _buffers[remote_jid][-1] == texto:
+        return
+    _buffers[remote_jid].append(texto)
     timer = _timers.get(remote_jid)
     if timer and not timer.done():
         timer.cancel()

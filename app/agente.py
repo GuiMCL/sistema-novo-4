@@ -13,6 +13,7 @@ tabela Conversa, janela de 50 mensagens (paridade com o Redis Chat Memory).
 
 from __future__ import annotations
 
+import contextvars
 import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -34,6 +35,15 @@ from . import auth, db, ia, tools
 
 # Janela de memória (nº de mensagens do modelo) — paridade com o n8n (50).
 JANELA_MEMORIA = 50
+
+# Telefone (remoteJid) do contato sendo atendido — setado por `responder` e
+# lido pelo system prompt dinâmico para injetar o contexto estruturado do
+# cliente (agendamentos ativos, veículo, serviço). Sem isso a IA precisaria
+# re-descobrir tudo pelo histórico, o que causa perguntas repetidas e "novo
+# agendamento" desnecessário.
+_CONTATO_CTX: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "contato", default=None
+)
 
 _DIAS_SEMANA = [
     "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
@@ -58,7 +68,8 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - listar_vagas: boxes de atendimento disponíveis (ex.: Box 1, Box 2).
 - consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre (use para SUGERIR datas ao cliente, ex.: "tem vaga na quarta"); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
-- agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro.
+- agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes, confirmar_existente): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro. Se devolver AVISO de agendamento existente, NÃO prossiga: o cliente já tem atendimento ativo; novos sintomas vão para atualizar_observacoes, e só um pedido EXPLÍCITO de novo atendimento autoriza confirmar_existente=true.
+- atualizar_observacoes(agendamento_id, texto): anexa sintomas/detalhes a um agendamento ATIVO já existente — use quando o cliente traz informação nova sobre o atendimento que já está agendado (NUNCA crie outro agendamento para isso).
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id). Quando o DONO remarca/cancela horário de um cliente, pergunte se ele quer que o cliente seja avisado; só com sim explícito passe avisar_cliente=true.
 - fechar_data / abrir_data / bloquear_horario [SÓ DONO]: fecha ou reabre dias e períodos, ou bloqueia uma faixa de horário.
@@ -81,7 +92,8 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - listar_vagas: boxes de atendimento disponíveis.
 - consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre (use para SUGERIR datas ao cliente, ex.: "tem vaga na quarta"); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
-- agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro.
+- agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes, confirmar_existente): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro. Se devolver AVISO de agendamento existente, NÃO prossiga: o cliente já tem atendimento ativo; novos sintomas vão para atualizar_observacoes, e só um pedido EXPLÍCITO de novo atendimento autoriza confirmar_existente=true.
+- atualizar_observacoes(agendamento_id, texto): anexa sintomas/detalhes a um agendamento ATIVO já existente — use quando o cliente traz informação nova sobre o atendimento que já está agendado (NUNCA crie outro agendamento para isso).
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id): remarca ou cancela um agendamento do próprio cliente.
 - Gestão da agenda (fechar/abrir dias, bloquear horário, criar/editar serviço, remanejar um dia) é exclusiva do dono — você NÃO tem essas ferramentas. Se pedirem, explique com gentileza que isso é feito pelo dono.
@@ -101,6 +113,10 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - NUNCA informe, confirme ou invente um horário de relógio (ex.: "às 13h", "às 15h"). O atendimento é por dia inteiro, sem horário marcado. Se perguntarem "que horas", responda que é por dia inteiro e pergunte o dia.
 - ANTES de recomendar ou confirmar uma data, consulte a disponibilidade com consultar_horarios_disponiveis: sem data, ele retorna os próximos dias com vaga livre (use para SUGERIR dias ao cliente); com data, diz se o dia em questão tem vaga. Só agende com agendar(data=...) depois de confirmar que o dia está livre — nunca ofereça uma data já lotada.
 - NUNCA chame agendar(...) sem o cliente TER CONFIRMADO explicitamente o dia — se ele disser "vou ver", "deixa eu pensar", "te falo depois" ou ainda não confirmar o dia, NÃO crie o agendamento. Apenas apresente os dias livres e aguarde a confirmação clara.
+- NÃO repita perguntas: o bloco "Contexto do cliente" (dados do sistema) e o histórico da conversa são fontes de verdade. Nome, veículo, placa, serviço, problema e data que já apareceram lá NUNCA devem ser perguntados de novo. Só pergunte o que realmente faltar.
+- Mensagens curtas ("sim", "isso", "pode", "hoje", "amanhã", "ok", "fechou", "beleza", "já falei") respondem à PERGUNTA ANTERIOR — nunca as interprete isoladamente, nem reinicie o atendimento por causa delas.
+- Se o cliente JÁ TEM agendamento ativo (bloco "Contexto do cliente") e trouxer sintomas ou detalhes novos (vazando óleo, barulho, ar não gela...), NÃO crie outro agendamento: registre as informações com atualizar_observacoes no agendamento existente e diga que a equipe vai avaliar junto com o atendimento já agendado. Só agende algo novo se o cliente pedir explicitamente um novo atendimento (serviço e/ou dia diferentes).
+- Áudio transcrito e imagem descrita são mensagens normais: use as informações deles normalmente, sem descartar e sem reiniciar a conversa.
 - NUNCA diga que um agendamento está "confirmado" — o agendar cria uma RESERVA. Diga apenas que o dia ficou RESERVADO para o cliente e que a confirmação final é feita pela equipe. Só fale "confirmado" se houver info explícita da tool informando status confirmado.
 - Converta datas relativas (hoje, amanhã, sexta, essa/proxima semana) para YYYY-MM-DD usando SEMPRE a data atual informada no início da mensagem do sistema. Considere a semana iniciando na segunda-feira: "essa semana" vai de segunda a domingo da semana atual, "proxima semana" e a semana seguinte. Em caso de dúvida, confirme o dia com o cliente antes de agendar.
 - Quando MENCIONAR uma data na sua resposta ao cliente, use SEMPRE o formato brasileiro dd/mm/aaaa (ex.: 10/08/2026). O formato YYYY-MM-DD é usado APENAS no parâmetro `data` das ferramentas — nunca na mensagem que você escreve.
@@ -127,6 +143,7 @@ _TOOLS_CLIENTE = [
     tools.meus_agendamentos,
     tools.reagendar,
     tools.cancelar,
+    tools.atualizar_observacoes,
     tools.transferir_atendimento,
     tools.listar_destinos_transferencia,
 ]
@@ -186,6 +203,70 @@ def prompt_atual(dono: bool) -> tuple[str, str]:
     return geral, mcp
 
 
+def _contexto_cliente() -> str:
+    """Bloco de contexto estruturado do contato atual (fonte de verdade).
+
+    Reconstruído a cada mensagem a partir do banco: nome cadastrado e
+    agendamentos ativos (data, serviço, status, veículo, placa, observações).
+    Dá à IA o que o sistema JÁ SABE — ela não deve perguntar de novo o que
+    está aqui, nem criar agendamento novo quando já existe atendimento.
+    """
+    tel = _CONTATO_CTX.get()
+    if not tel:
+        return ""
+    try:
+        cli = db.get_cliente(tel)
+        ags = [a for a in db.agendamentos_do_telefone(tel) if a.status in db.STATUS_VIGENTES]
+    except Exception:
+        return ""
+
+    linhas: list[str] = []
+    # Nome: cadastro (upsert do pipeline) primeiro; fallback = nome gravado
+    # no próprio agendamento (cliente pode não ter linha em Cliente ainda).
+    nome = (cli.nome or "").strip() if cli else ""
+    if not nome and ags:
+        nome = (ags[0].nome_cliente or "").strip()
+    linhas.append(f"## Contexto do cliente (dados do sistema — use SEMPRE, não pergunte de novo)")
+    linhas.append(f"- Nome cadastrado: {nome or '—'}")
+    if not ags:
+        linhas.append("- Agendamento ativo: NÃO (nenhum agendamento vigente para este contato).")
+        linhas.append("- Se o cliente quiser agendar, siga o fluxo normal de agendamento.")
+    else:
+        linhas.append(f"- Agendamento(s) ativo(s): {len(ags)}")
+        for a in ags:
+            servico = ""
+            try:
+                s = db.get_servico(a.servico_id)
+                servico = s.nome if s else ""
+            except Exception:
+                pass
+            veiculo = (a.veiculo or "").strip()
+            placa = (a.placa or "").strip()
+            obs = (a.observacoes or "").strip().replace("\n", " / ")
+            detalhe = (
+                f"  - Data: {a.inicio[:10]} · Serviço: {servico or f'#{a.servico_id}'}"
+                f" · Status: {a.status}"
+            )
+            if veiculo:
+                detalhe += f" · Veículo: {veiculo}"
+            if placa:
+                detalhe += f" · Placa: {placa}"
+            if obs:
+                detalhe += f" · Observações registradas: {obs}"
+            linhas.append(detalhe)
+        linhas.append(
+            "- O cliente TEM atendimento agendado. Novos sintomas/detalhes NÃO criam "
+            "novo agendamento: registre com atualizar_observacoes no agendamento "
+            "existente. Só agende outro se o cliente pedir EXPLICITAMENTE um novo "
+            "atendimento (outro serviço/dia)."
+        )
+    linhas.append(
+        "- Informações presentes neste bloco ou no histórico da conversa NUNCA devem "
+        "ser perguntadas de novo ao cliente (nome, veículo, placa, serviço, problema, data)."
+    )
+    return "\n".join(linhas)
+
+
 def _system_prompt() -> str:
     cfg = db.get_config()
     try:
@@ -208,12 +289,15 @@ def _system_prompt() -> str:
         f"'essa semana' = {inicio_semana:%d/%m} a {fim_semana:%d/%m}; 'próxima semana' = "
         f"{inicio_semana + timedelta(days=7):%d/%m} a {fim_semana + timedelta(days=7):%d/%m}. "
         f"Para as ferramentas, o parâmetro `data` é SEMPRE YYYY-MM-DD. "
-        f"Nas suas respostas ao cliente, escreva datas como dd/mm/aaaa (ex.: 10/08/2026)."
+        f"Nas suas respostas ao cliente, escreva datas como dd/mm/aaaa (ex.: 10/08/2026).\n"
+        f"Expediente: hoje só pode receber agendamento enquanto o expediente estiver em "
+        f"curso; consultar_horarios_disponiveis já omite hoje depois do encerramento — confie "
+        f"na ferramenta e nunca ofereça dia/horário que ela não retornar."
     )
     # Remetente vem do contextvar (setado no pipeline antes do run) — mesmo
     # critério usado p/ montar o toolset em `responder`.
     geral, mcp = prompt_atual(auth.eh_dono())
-    partes = [prefixo, geral.strip()]
+    partes = [prefixo, _contexto_cliente(), geral.strip()]
     if mcp.strip():
         partes.append(mcp.strip())
     return "\n\n".join(p for p in partes if p)
@@ -306,7 +390,11 @@ async def responder(telefone: str, mensagem: str) -> str:
     agent.system_prompt(dynamic=True)(_system_prompt)
 
     historico = _renovar_system_prompt(_carregar_memoria(telefone))
-    result = await agent.run(mensagem, message_history=historico)
+    token_contato = _CONTATO_CTX.set(telefone)
+    try:
+        result = await agent.run(mensagem, message_history=historico)
+    finally:
+        _CONTATO_CTX.reset(token_contato)
 
     msgs = _aparar(list(result.all_messages()))
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())

@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from threading import Lock
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
@@ -425,6 +426,45 @@ def dentro_do_funcionamento(inicio: datetime, fim: datetime) -> bool:
         if inicio >= h_ini and fim <= h_fim:
             return True
     return False
+
+
+def _agora_local_db() -> datetime:
+    """`datetime` local (naive) no fuso da Config — mesma convenção de tools._agora_local."""
+    cfg = get_config()
+    try:
+        tz = ZoneInfo(cfg.fuso)
+    except Exception:
+        tz = ZoneInfo("America/Sao_Paulo")
+    return datetime.now(tz).replace(tzinfo=None)
+
+
+def pode_agendar_no_dia(dia: date, agora: datetime | None = None) -> bool:
+    """True se `dia` ainda é uma data válida para um NOVO agendamento.
+
+    Regra de expediente (camada de defesa do backend, independente da IA):
+      - o dia precisa ter horário de funcionamento cadastrado;
+      - para HOJE, o expediente precisa estar EM CURSO: se a hora atual já
+        passou do encerramento do último intervalo do dia, hoje NÃO pode mais
+        receber agendamento novo — o próximo dia disponível precisa ser
+        consultado nas ferramentas, nunca inventado.
+
+    Bloqueios (fechar_data) NÃO entram aqui — quem precisa deles usa
+    `dia_bloqueado`. `agora` sem fuso é tratado como local no fuso da Config
+    (mesma convenção do restante do sistema).
+    """
+    if agora is None:
+        agora = _agora_local_db()
+    else:
+        agora = agora.replace(tzinfo=None)
+    intervalos = horarios_do_dia(dia.weekday())
+    if not intervalos:
+        return False
+    if agora.date() == dia:
+        ultimo = intervalos[-1]
+        encerramento = datetime.fromisoformat(f"{dia}T{ultimo.fim}")
+        if agora >= encerramento:
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -848,6 +888,22 @@ def remover_bloqueio_por_data(data: str, data_fim: str | None = None) -> int:
         return len(achados)
 
 
+def dia_bloqueado(dia: date) -> bool:
+    """True se `dia` está com bloqueio de DIA INTEIRO (fechar_data).
+
+    Bloqueios parciais (bloquear_horario) não fecham o dia — o conflito de
+    agenda continua sendo resolvido por `_conflita` no momento de criar.
+    """
+    d = dia.isoformat()
+    with _session() as s:
+        for b in s.exec(select(Bloqueio).where(Bloqueio.data <= d)).all():
+            if (b.data_fim or b.data) < d:
+                continue
+            if b.inicio is None:
+                return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Agendamentos
 # ---------------------------------------------------------------------------
@@ -1000,6 +1056,27 @@ def cancelar_agendamento(agendamento_id: int) -> bool:
         s.add(a)
         s.commit()
     return True
+
+
+def atualizar_observacoes(agendamento_id: int, texto: str) -> Agendamento | None:
+    """Acrescenta observações (sintomas, detalhes) a um agendamento ativo.
+
+    Usada quando o cliente traz uma informação NOVA sobre um atendimento que
+    já existe — em vez de criar outro agendamento, os detalhes ficam anexados
+    ao atual para a equipe avaliar. Anexa (não sobrescreve) ao histórico.
+    """
+    texto = (texto or "").strip()
+    if not texto:
+        return None
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or a.status not in STATUS_VIGENTES:
+            return None
+        existente = (a.observacoes or "").strip()
+        a.observacoes = f"{existente}\n{texto}".strip() if existente else texto
+        s.add(a)
+        s.commit()
+        return a
 
 
 def confirmar_agendamento(agendamento_id: int) -> bool:
