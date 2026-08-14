@@ -31,6 +31,13 @@ def test_disponibilidade_omite_hoje_apos_fechamento(seg_18h):
     assert "2026-08-23" not in datas  # domingo fechado
 
 
+def test_disponibilidade_retorna_apenas_a_vaga_mais_proxima(seg_18h):
+    """Sem data, a tool retorna SÓ a próxima data com vaga livre (não uma lista)."""
+    r = tools.consultar_horarios_disponiveis()
+    datas = [d["data"] for d in r["dias_disponiveis"]]
+    assert datas == ["2026-08-18"]  # a vaga mais próxima (terça)
+
+
 def test_disponibilidade_com_data_marca_pode_agendar_falso_hoje_fechado(seg_18h):
     r = tools.consultar_horarios_disponiveis(data="2026-08-17")
     assert r["pode_agendar"] is False
