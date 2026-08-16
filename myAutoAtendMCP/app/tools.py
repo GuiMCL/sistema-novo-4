@@ -168,6 +168,7 @@ def consultar_horarios_disponiveis(
 @mcp.tool()
 def agendar(
     servico_id: int | None = None,
+    servico_nome: str = "",
     descricao: str = "",
     nome_cliente: str = "",
     data: str = "",
@@ -181,7 +182,9 @@ def agendar(
     Pode ser com serviço (`servico_id`, se existir serviço compatível na lista)
     ou apenas pelo sintoma/problema descrito pelo cliente em `descricao`
     (ex.: "ruído no pneu dianteiro direito", "trocar o cabeçote"). Pelo menos
-    um dos dois deve ser informado. A vaga é auto-atribuída e o cliente ocupa
+    um dos dois deve ser informado. Se o cliente citar o nome exato do serviço
+    e ele NÃO estiver no catálogo, passe em `servico_nome` esse texto solto
+    (sem criar serviço novo). A vaga é auto-atribuída e o cliente ocupa
     uma vaga (box) no DIA inteiro.
 
     Para oficina: informe `veiculo` (modelo do carro) e `placa` se o cliente
@@ -216,6 +219,7 @@ def agendar(
 
     ag = db.criar_agendamento(
         servico_id=servico.id if servico else None,
+        servico_nome=servico_nome,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome_cliente,
         inicio=dt_inicio.isoformat(timespec="minutes"),
@@ -405,8 +409,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     info_ag = ""
     if agendamentos:
         ultimo = agendamentos[-1]
-        serv = db.get_servico(ultimo.servico_id) if ultimo.servico_id else None
-        nome_serv = serv.nome if serv else (ultimo.descricao or "")
+        nome_serv = db.nome_servico(ultimo)
         dt = (ultimo.inicio or "").split("T")[0] if ultimo.inicio else ""
         info_ag = f" | {nome_serv} {dt}" if nome_serv else ""
     tel_fmt = formatar_internacional(tel) or tel

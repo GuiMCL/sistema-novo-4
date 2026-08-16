@@ -232,6 +232,7 @@ class LembreteConfig(SQLModel, table=True):
 class Agendamento(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     servico_id: Optional[int] = None  # opcional — agendamento pode ser só pelo sintoma (descricao)
+    servico_nome: str = ""  # nome digitado solto no painel, sem vínculo com o catálogo
     telefone_cliente: str
     nome_cliente: str
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
@@ -1121,6 +1122,10 @@ def _migrar() -> None:
                 )
             if cols["servico_id"][3]:  # notnull
                 _reconstruir_agendamento(conn)
+            if "servico_nome" not in cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE agendamento ADD COLUMN servico_nome VARCHAR NOT NULL DEFAULT ''"
+                )
             conn.commit()
         cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(cliente)")}
         if cols and "instancia_id" not in cols:
@@ -1584,6 +1589,17 @@ def get_servico(servico_id: int) -> Servico | None:
         return s.get(Servico, servico_id)
 
 
+def nome_servico(ag) -> str:
+    """Nome exibível do serviço: texto livre digitado no painel, catálogo ou sintoma."""
+    if getattr(ag, "servico_nome", ""):
+        return ag.servico_nome
+    if getattr(ag, "servico_id", None):
+        s = get_servico(ag.servico_id)
+        if s:
+            return s.nome
+    return getattr(ag, "descricao", "") or ""
+
+
 def criar_servico(nome: str, descricao: str, valor: float, duracao_min: int) -> Servico:
     with _lock, _session() as s:
         novo = Servico(nome=nome, descricao=descricao, valor=valor, duracao_min=duracao_min)
@@ -1774,6 +1790,7 @@ def criar_agendamento(
     instancia_id: int | None = None,
     origem: str = "bot",
     descricao: str = "",
+    servico_nome: str = "",
 ) -> Agendamento | None:
     """Checa conflito (por vagas), auto-atribui vaga e grava."""
     with _lock, _session() as s:
@@ -1782,6 +1799,7 @@ def criar_agendamento(
         vaga_id = vaga_disponivel_auto(inicio, fim)
         a = Agendamento(
             servico_id=servico_id,
+            servico_nome=servico_nome.strip(),
             telefone_cliente=telefone_cliente,
             nome_cliente=nome_cliente,
             inicio=inicio,

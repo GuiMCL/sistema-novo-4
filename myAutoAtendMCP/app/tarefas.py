@@ -90,8 +90,8 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
     modelo configurado, cai para a geracao por IA (comportamento legado).
     """
     try:
-        servico = db.get_servico(ag.servico_id) if ag.servico_id else None
-        nome_servico = servico.nome if servico else (ag.descricao or "atendimento")
+        servico = db.nome_servico(ag)
+        nome_servico = servico or "atendimento"
         data, _ = data_e_hora_br(ag.inicio)
 
         config = db.get_lembrete_config()
@@ -204,8 +204,7 @@ def descrever_tarefa(t: db.Tarefa) -> dict:
     ag = db.get_agendamento(payload.get("agendamento_id") or 0)
     if ag:
         nome_cliente = ag.nome_cliente
-        s = db.get_servico(ag.servico_id) if ag.servico_id else None
-        servico = s.nome if s else (ag.descricao or f"serviço #{ag.servico_id}")
+        servico = db.nome_servico(ag)
         quando = ag.inicio
     titulo = _RESUMO_ACAO.get(acao, t.tipo)
     return {
@@ -225,8 +224,8 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     acao = payload.get("acao", "remarcar")
     if acao in ("remarcar", "reagendado") and ag.status not in ("ativo", "confirmado"):
         return None
-    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
-    nome_servico = servico.nome if servico else (ag.descricao or f"serviço #{ag.servico_id}")
+    servico = db.nome_servico(ag)
+    nome_servico = servico or f"serviço #{ag.servico_id}"
     data, _ = data_e_hora_br(ag.inicio)
 
     if acao in ("remarcar", "cancelar"):

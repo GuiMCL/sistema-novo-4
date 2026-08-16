@@ -57,7 +57,6 @@ if (modal) {
     salvarBtn.disabled = true;
     try {
       const formData = new FormData(form);
-      if (!formData.get('servico_id')) formData.delete('servico_id');
       const r = await fetch(form.action, {
         method: 'POST',
         body: formData,

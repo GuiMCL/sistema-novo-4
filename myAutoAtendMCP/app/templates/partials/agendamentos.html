@@ -75,12 +75,7 @@
       </div>
       <div>
         <label>Serviço (opcional) <span style="text-transform:none;font-weight:400">— preencha se souber o serviço exato</span></label>
-        <select name="servico_id" id="agm-servico">
-          <option value="">Nenhum — apenas sintoma</option>
-          {% for s in servicos if s.ativo %}
-          <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
-          {% endfor %}
-        </select>
+        <input name="servico_nome" placeholder="Ex.: Troca de óleo" autocomplete="off">
       </div>
 
       <p class="agm-slots-dica">O atendimento é por DIA INTEIRO — o cliente ocupa uma vaga (box) o dia todo.</p>

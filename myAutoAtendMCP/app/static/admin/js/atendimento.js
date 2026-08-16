@@ -316,7 +316,6 @@ class Atendimento {
   async criarAgendamento(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
-    if (!formData.get('servico_id')) formData.delete('servico_id');
     try {
       const data = await this.api('/atendimento/api/agendamento', { method: 'POST', body: formData });
       if (data && data.ok) {

@@ -117,10 +117,7 @@
         <label>Sintoma/Descrição</label>
         <textarea name="descricao" id="ag-descricao" placeholder="Ex.: ruído no pneu dianteiro direito" rows="2" required></textarea>
         <label>Serviço (opcional)</label>
-        <select name="servico_id">
-          <option value="">Nenhum — apenas sintoma</option>
-          {% for s in servicos %}<option value="{{ s.id }}">{{ s.nome }} (R$ {{ "%.2f"|format(s.valor) }})</option>{% endfor %}
-        </select>
+        <input type="text" name="servico_nome" placeholder="Ex.: Troca de óleo" autocomplete="off">
         <label>Cliente</label>
         <input type="text" name="nome_cliente" id="ag-nome" required>
         <label>Telefone</label>

@@ -218,7 +218,7 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
     vaga_por_id = {v.id: v.nome for v in vagas}
     ag_detalhe: dict[int, dict] = {}
     for a in agendamentos:
-        srv = nome_por_id.get(a.servico_id) if a.servico_id else None
+        srv = db.nome_servico(a)
         ag_detalhe[a.id] = {
             "id": a.id,
             "nome": a.nome_cliente,
@@ -888,6 +888,7 @@ def novo_agendamento(
     request: Request,
     _: db.Usuario = Depends(auth.admin_required),
     servico_id: int | None = Form(None),
+    servico_nome: str = Form(""),
     descricao: str = Form(""),
     nome_cliente: str = Form(...),
     telefone_cliente: str = Form(...),
@@ -918,6 +919,7 @@ def novo_agendamento(
     dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
     ag = db.criar_agendamento(
         servico_id=servico.id if servico else None,
+        servico_nome=servico_nome,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome,
         inicio=dt_inicio.isoformat(timespec="minutes"),
