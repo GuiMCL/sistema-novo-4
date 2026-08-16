@@ -743,10 +743,9 @@ def agenda_slots(data: str, servico_id: int | None = None, _: str = Depends(aute
     return {"slots": slots, "fechado": False}
 
 
-def _resolver_servico(servico: str, servico_id: int | None) -> tuple[int, str, int]:
+def _resolver_servico(servico: str, servico_id: int | None) -> tuple[int | None, str, int]:
     """(servico_id, nome, duracao_min) a partir do form: id do catálogo OU texto
-    livre digitado pelo dono — o texto vira/acha um serviço no catálogo, então
-    o serviço digitado aparece em "Serviços"."""
+    livre digitado pelo dono (sem vínculo com o catálogo — nada é criado lá)."""
     if servico_id:
         srv = db.get_servico(servico_id)
         if not srv:
@@ -755,8 +754,7 @@ def _resolver_servico(servico: str, servico_id: int | None) -> tuple[int, str, i
     nome = (servico or "").strip()
     if not nome:
         raise HTTPException(status_code=400, detail="Informe o serviço.")
-    srv = db.obter_ou_criar_servico_por_nome(nome)
-    return srv.id, srv.nome, srv.duracao_min
+    return None, nome, 60
 
 
 @router.post("/admin/agendamento")

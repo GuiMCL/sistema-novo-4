@@ -18,7 +18,6 @@ from threading import Lock
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .config import settings
@@ -857,25 +856,6 @@ def get_servico(servico_id: int) -> Servico | None:
 def criar_servico(nome: str, descricao: str, valor: float, duracao_min: int) -> Servico:
     with _lock, _session() as s:
         novo = Servico(nome=nome, descricao=descricao, valor=valor, duracao_min=duracao_min)
-        s.add(novo)
-        s.commit()
-        return novo
-
-
-def obter_ou_criar_servico_por_nome(nome: str, duracao_min: int = 60) -> Servico:
-    """Acha um serviço do catálogo pelo nome (sem diferenciar maiúsculas) ou
-    cria um novo. Usado quando o dono digita o serviço livre no agendamento:
-    ele aparece no catálogo de Serviços e o agendamento fica vinculado."""
-    nome = (nome or "").strip()
-    if not nome:
-        raise ValueError("Nome do serviço vazio.")
-    with _lock, _session() as s:
-        existente = s.exec(
-            select(Servico).where(func.lower(Servico.nome) == nome.lower())
-        ).first()
-        if existente:
-            return existente
-        novo = Servico(nome=nome, descricao="", valor=0.0, duracao_min=duracao_min)
         s.add(novo)
         s.commit()
         return novo

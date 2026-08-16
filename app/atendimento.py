@@ -242,13 +242,12 @@ def api_criar_agendamento(
         srv = db.get_servico(servico_id)
         if not srv:
             raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+        servico_nome, duracao_min = srv.nome, srv.duracao_min
     else:
-        nome_servico = (servico or "").strip()
-        if not nome_servico:
+        servico_nome = (servico or "").strip()
+        if not servico_nome:
             raise HTTPException(status_code=400, detail="Informe o serviço.")
-        # O serviço digitado vira/acha um item no catálogo (aparece em Serviços).
-        srv = db.obter_ou_criar_servico_por_nome(nome_servico)
-    servico_nome, duracao_min = srv.nome, srv.duracao_min
+        duracao_min = 60
 
     try:
         dt_inicio = datetime.fromisoformat(inicio)

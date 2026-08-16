@@ -34,15 +34,6 @@ def test_nome_servico_cai_no_catalogo_quando_ha_id():
     assert db.nome_servico(ag) == "Suspensão"
 
 
-def test_servico_livre_vira_item_do_catalogo():
-    novo = db.obter_ou_criar_servico_por_nome("Troca de óleo", duracao_min=60)
-    assert novo.id is not None
-    assert novo.nome == "Troca de óleo"
-    # segunda vez com outra caixa reusa o mesmo item
-    de_novo = db.obter_ou_criar_servico_por_nome("troca de ÓLEO")
-    assert de_novo.id == novo.id
-
-
 def test_migracao_servico_id_vira_anulavel():
     with db.engine.connect() as conn:
         conn.exec_driver_sql("DROP TABLE IF EXISTS agendamento")

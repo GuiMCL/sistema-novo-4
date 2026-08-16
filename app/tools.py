@@ -94,17 +94,10 @@ def consultar_horarios_disponiveis(
     O agendamento é por DIA INTEIRO (o cliente ocupa uma vaga/box o dia todo),
     então a disponibilidade é por dia, não por horário de relógio.
 
-<<<<<<< HEAD
     - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
       `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
       Dias que o próprio cliente JÁ TEM agendamento saem em `dias_do_cliente`
       (marcados como dele) e NÃO aparecem como vaga livre.
-=======
-    - SEM `data`: retorna APENAS a PRÓXIMA data com expediente e vaga livre
-      (a vaga mais próxima, até `quantidade_dias` dias à frente) — use para
-      SUGERIR ao cliente apenas essa data. Se o cliente recusar, cheque o dia
-      que ele quiser passando `data`.
->>>>>>> 2d4a7c473b10564f37cbeec23afe43118cb2e982
     - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre, quantas
       vagas sobram e os horários em que há capacidade. Se o próprio cliente já
       tem agendamento nesse dia, retorna `dia_ja_reservado: true` (o dia dele
@@ -123,7 +116,6 @@ def consultar_horarios_disponiveis(
     total_vagas = len(vagas) or 1
     nome_servico = servico.nome if servico else ""
 
-<<<<<<< HEAD
     tel = auth.requester(telefone_solicitante)
     meus_vigentes = (
         [a for a in db.agendamentos_do_telefone(tel) if a.status in db.STATUS_VIGENTES]
@@ -132,11 +124,6 @@ def consultar_horarios_disponiveis(
     )
 
     # Modo 1: sem data → lista os próximos dias disponíveis
-=======
-    # Modo 1: sem data → retorna APENAS a PRÓXIMA data com vaga livre (a vaga
-    # mais próxima). O agente deve oferecer somente essa data; se o cliente
-    # recusar, ele checa o dia específico com `data`.
->>>>>>> 2d4a7c473b10564f37cbeec23afe43118cb2e982
     if not data.strip():
         agora = _agora_local()
         dias_disponiveis: list[dict] = []
@@ -165,7 +152,6 @@ def consultar_horarios_disponiveis(
                         "vagas_livres": max(0, total_vagas - ocupadas),
                     }
                 )
-<<<<<<< HEAD
         hoje_iso = agora.date().isoformat()
         dias_do_cliente = [
             {
@@ -189,10 +175,6 @@ def consultar_horarios_disponiveis(
             "dias_do_cliente": dias_do_cliente,
             "total_vagas": total_vagas,
         }
-=======
-                break  # só a vaga mais próxima
-        return {"data": "", "servico": nome_servico, "dias_disponiveis": dias_disponiveis, "total_vagas": total_vagas}
->>>>>>> 2d4a7c473b10564f37cbeec23afe43118cb2e982
 
     try:
         dia = date.fromisoformat(data)
