@@ -82,7 +82,23 @@ app.include_router(admin_router)
 app.include_router(atendimento_router)
 app.include_router(whatsapp_router)
 app.mount("/mcp", SolicitanteMiddleware(mcp_app))
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+class _StaticNoCache(StaticFiles):
+    """JS/CSS com Cache-Control: no-cache — o navegador revalida a cada carga,
+    então mudanças de front end aparecem sem Ctrl+F5 nem troca de cache."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def file_response(self, *args, **kwargs):
+        resposta = super().file_response(*args, **kwargs)
+        if resposta.path.lower().endswith((".js", ".css")):
+            resposta.headers["Cache-Control"] = "no-cache"
+        return resposta
+
+
+app.mount("/static", _StaticNoCache(directory="app/static"), name="static")
 
 
 @app.get("/")
