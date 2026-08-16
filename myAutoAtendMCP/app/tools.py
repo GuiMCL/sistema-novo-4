@@ -101,8 +101,10 @@ def consultar_horarios_disponiveis(
     O agendamento é por DIA INTEIRO (o cliente ocupa uma vaga/box o dia todo),
     então a disponibilidade é por dia, não por horário de relógio.
 
-    - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
-      `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
+    - SEM `data`: retorna APENAS a PRÓXIMA data com expediente e vaga livre
+      (a vaga mais próxima, até `quantidade_dias` dias à frente) — use para
+      SUGERIR ao cliente apenas essa data. Se o cliente recusar, cheque o dia
+      que ele quiser passando `data`.
     - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre e
       quantas vagas/boxes sobram.
 
@@ -119,7 +121,9 @@ def consultar_horarios_disponiveis(
     total_vagas = len(vagas) or 1
     nome_servico = servico.nome if servico else ""
 
-    # Modo 1: sem data → lista os próximos dias disponíveis
+    # Modo 1: sem data → retorna APENAS a PRÓXIMA data com vaga livre (a vaga
+    # mais próxima). O agente deve oferecer somente essa data; se o cliente
+    # recusar, ele checa o dia específico com `data`.
     if not data.strip():
         agora = _agora_local()
         dias_disponiveis: list[dict] = []
@@ -139,6 +143,7 @@ def consultar_horarios_disponiveis(
                         "vagas_livres": max(0, total_vagas - ocupadas),
                     }
                 )
+                break  # só a vaga mais próxima
         return {"data": "", "servico": nome_servico, "dias_disponiveis": dias_disponiveis, "total_vagas": total_vagas}
 
     try:
