@@ -67,9 +67,11 @@ PROMPT_MCP_DONO_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - listar_vagas: boxes de atendimento disponíveis (ex.: Box 1, Box 2).
-- consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre (use para SUGERIR datas ao cliente, ex.: "tem vaga na quarta"); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
+- consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre em `dias_disponiveis` e os dias que o cliente JÁ tem em `dias_do_cliente` (use para SUGERIR datas: dias_do_cliente NÃO é vaga nova, é reserva dele); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. Se vier `dia_ja_reservado: true`, o dia é do próprio cliente — diga que ele já está reservado nesse dia e NUNCA diga que acabaram as vagas. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
 - agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes, confirmar_existente): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro. Se devolver AVISO de agendamento existente, NÃO prossiga: o cliente já tem atendimento ativo; novos sintomas vão para atualizar_observacoes, e só um pedido EXPLÍCITO de novo atendimento autoriza confirmar_existente=true.
 - atualizar_observacoes(agendamento_id, texto): anexa sintomas/detalhes a um agendamento ATIVO já existente — use quando o cliente traz informação nova sobre o atendimento que já está agendado (NUNCA crie outro agendamento para isso).
+- atualizar_dados_veiculo(agendamento_id, veiculo, placa, modelo, ano): anexa os DADOS DO VEÍCULO a um agendamento ATIVO já existente — quando o cliente informa o carro de um atendimento que já está marcado (ex.: "Onix 2012/2013", "Placa AWG4F79"), NUNCA chame agendar/consultar para isso.
+- confirmar_agendamento(agendamento_id): confirma o agendamento quando o cliente responder SIM a um lembrete de confirmação ("sim", "confirmo", "ok", "fechou") ou pedir para confirmar — isso é CONFIRMAÇÃO, nunca um novo atendimento.
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id). Quando o DONO remarca/cancela horário de um cliente, pergunte se ele quer que o cliente seja avisado; só com sim explícito passe avisar_cliente=true.
 - fechar_data / abrir_data / bloquear_horario [SÓ DONO]: fecha ou reabre dias e períodos, ou bloqueia uma faixa de horário.
@@ -91,9 +93,11 @@ PROMPT_MCP_CLIENTE_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - listar_vagas: boxes de atendimento disponíveis.
-- consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre (use para SUGERIR datas ao cliente, ex.: "tem vaga na quarta"); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
+- consultar_horarios_disponiveis(data="", servico_id): verifica disponibilidade ANTES de sugerir ou agendar uma data. Sem `data`, retorna os próximos dias com vaga livre em `dias_disponiveis` e os dias que o cliente JÁ tem em `dias_do_cliente` (use para SUGERIR datas: dias_do_cliente NÃO é vaga nova, é reserva dele); com `data` (YYYY-MM-DD), retorna se o dia tem vaga e quantas vagas sobram. Se vier `dia_ja_reservado: true`, o dia é do próprio cliente — diga que ele já está reservado nesse dia e NUNCA diga que acabaram as vagas. A capacidade é por DIA INTEIRO (nº de vagas/boxes).
 - agendar(servico_id, nome_cliente, data, veiculo, placa, observacoes, confirmar_existente): agenda um serviço para um DIA. data = YYYY-MM-DD (sem horário). O agendar sozinho verifica se há vaga — se retornar erro de lotação, avise e pergunte se prefere outro dia. Para oficina: pergunte veículo e placa se não informados. observacoes é opcional. NÃO pergunte horário — é por DIA inteiro. Se devolver AVISO de agendamento existente, NÃO prossiga: o cliente já tem atendimento ativo; novos sintomas vão para atualizar_observacoes, e só um pedido EXPLÍCITO de novo atendimento autoriza confirmar_existente=true.
 - atualizar_observacoes(agendamento_id, texto): anexa sintomas/detalhes a um agendamento ATIVO já existente — use quando o cliente traz informação nova sobre o atendimento que já está agendado (NUNCA crie outro agendamento para isso).
+- atualizar_dados_veiculo(agendamento_id, veiculo, placa, modelo, ano): anexa os DADOS DO VEÍCULO a um agendamento ATIVO já existente — quando o cliente informa o carro de um atendimento que já está marcado (ex.: "Onix 2012/2013", "Placa AWG4F79"), NUNCA chame agendar/consultar para isso.
+- confirmar_agendamento(agendamento_id): confirma o agendamento quando o cliente responder SIM a um lembrete de confirmação ("sim", "confirmo", "ok", "fechou") ou pedir para confirmar — isso é CONFIRMAÇÃO, nunca um novo atendimento.
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id): remarca ou cancela um agendamento do próprio cliente.
 - Gestão da agenda (fechar/abrir dias, bloquear horário, criar/editar serviço, remanejar um dia) é exclusiva do dono — você NÃO tem essas ferramentas. Se pedirem, explique com gentileza que isso é feito pelo dono.
@@ -116,6 +120,10 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - NÃO repita perguntas: o bloco "Contexto do cliente" (dados do sistema) e o histórico da conversa são fontes de verdade. Nome, veículo, placa, serviço, problema e data que já apareceram lá NUNCA devem ser perguntados de novo. Só pergunte o que realmente faltar.
 - Mensagens curtas ("sim", "isso", "pode", "hoje", "amanhã", "ok", "fechou", "beleza", "já falei") respondem à PERGUNTA ANTERIOR — nunca as interprete isoladamente, nem reinicie o atendimento por causa delas.
 - Se o cliente JÁ TEM agendamento ativo (bloco "Contexto do cliente") e trouxer sintomas ou detalhes novos (vazando óleo, barulho, ar não gela...), NÃO crie outro agendamento: registre as informações com atualizar_observacoes no agendamento existente e diga que a equipe vai avaliar junto com o atendimento já agendado. Só agende algo novo se o cliente pedir explicitamente um novo atendimento (serviço e/ou dia diferentes).
+- Se um agendamento do cliente estiver AGUARDANDO CONFIRMAÇÃO (marcado no bloco "Contexto do cliente") e ele responder "sim", "confirmo", "ok", "fechou", "pode confirmar": isso CONFIRMA o lembrete — chame confirmar_agendamento e diga que o horário está confirmado. NÃO trate como novo atendimento, NÃO pergunte nome/veículo/placa de novo.
+- Se o cliente pedir para agendar um dia que JÁ é agendamento dele (no bloco "Contexto do cliente"), NÃO crie outro: avise que ele já está reservado nesse dia (ex.: "você já está reservado para segunda 17/08") e pergunte se deseja confirmar.
+- NUNCA diga "acabaram as vagas" para um dia que é do próprio cliente. Se consultar_horarios_disponiveis retornar dia_ja_reservado=true, ou se o dia aparecer em dias_do_cliente (sugestão sem data), é porque o cliente JÁ TEM o dia — informe isso. Dizer que o dia dele lotou confunde o cliente.
+- Veículo, placa, modelo e ano de um atendimento que JÁ está agendado vão para atualizar_dados_veiculo (e sintomas para atualizar_observacoes) — nunca chame agendar nem consulte disponibilidade só para anexar esses dados.
 - Áudio transcrito e imagem descrita são mensagens normais: use as informações deles normalmente, sem descartar e sem reiniciar a conversa.
 - NUNCA diga que um agendamento está "confirmado" — o agendar cria uma RESERVA. Diga apenas que o dia ficou RESERVADO para o cliente e que a confirmação final é feita pela equipe. Só fale "confirmado" se houver info explícita da tool informando status confirmado.
 - Converta datas relativas (hoje, amanhã, sexta, essa/proxima semana) para YYYY-MM-DD usando SEMPRE a data atual informada no início da mensagem do sistema. Considere a semana iniciando na segunda-feira: "essa semana" vai de segunda a domingo da semana atual, "proxima semana" e a semana seguinte. Em caso de dúvida, confirme o dia com o cliente antes de agendar.
@@ -141,9 +149,11 @@ _TOOLS_CLIENTE = [
     tools.listar_vagas,
     tools.agendar,
     tools.meus_agendamentos,
+    tools.confirmar_agendamento,
     tools.reagendar,
     tools.cancelar,
     tools.atualizar_observacoes,
+    tools.atualizar_dados_veiculo,
     tools.transferir_atendimento,
     tools.listar_destinos_transferencia,
 ]
@@ -234,12 +244,10 @@ def _contexto_cliente() -> str:
     else:
         linhas.append(f"- Agendamento(s) ativo(s): {len(ags)}")
         for a in ags:
-            servico = ""
             try:
-                s = db.get_servico(a.servico_id)
-                servico = s.nome if s else ""
+                servico = db.nome_servico(a)
             except Exception:
-                pass
+                servico = ""
             veiculo = (a.veiculo or "").strip()
             placa = (a.placa or "").strip()
             obs = (a.observacoes or "").strip().replace("\n", " / ")
@@ -253,12 +261,29 @@ def _contexto_cliente() -> str:
                 detalhe += f" · Placa: {placa}"
             if obs:
                 detalhe += f" · Observações registradas: {obs}"
+            if a.aguardando_confirmacao:
+                detalhe += (
+                    " · ⚠ AGUARDANDO CONFIRMAÇÃO (enviou-se um lembrete pedindo "
+                    "confirmação deste agendamento)"
+                )
             linhas.append(detalhe)
         linhas.append(
             "- O cliente TEM atendimento agendado. Novos sintomas/detalhes NÃO criam "
             "novo agendamento: registre com atualizar_observacoes no agendamento "
-            "existente. Só agende outro se o cliente pedir EXPLICITAMENTE um novo "
-            "atendimento (outro serviço/dia)."
+            "existente. Veículo/placa/modelo/ano informados depois da reserva vão para "
+            "atualizar_dados_veiculo (NUNCA para agendar). Só agende outro se o cliente "
+            "pedir EXPLICITAMENTE um novo atendimento (outro serviço/dia)."
+        )
+        linhas.append(
+            "- Se um agendamento está AGUARDANDO CONFIRMAÇÃO e o cliente responder "
+            "sim/confirmo/ok/fechou, chame confirmar_agendamento — isso CONFIRMA o "
+            "lembrete, NÃO é um novo atendimento e NÃO é hora de pedir dados de novo."
+        )
+        linhas.append(
+            "- Se o cliente pedir para marcar um dia que JÁ aparece como agendamento "
+            "dele no bloco acima, NÃO crie outro: diga que ele já tem esse dia "
+            "reservado (ex.: 'você já está reservado para 17/08') e pergunte se quer "
+            "confirmar ou ajustar algo."
         )
     linhas.append(
         "- Informações presentes neste bloco ou no histórico da conversa NUNCA devem "

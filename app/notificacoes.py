@@ -46,6 +46,7 @@ _TEMPLATES = {
     "agendado": "*Novo agendamento*\n{cliente} ({tel})\n{servico} - {data} as {hora}",
     "reagendado": "*Reagendamento*\n{cliente} ({tel})\n{servico} - agora {data} as {hora}",
     "cancelado": "*Cancelamento*\n{cliente} ({tel})\n{servico} - era {data} as {hora}",
+    "confirmado": "*Confirmação*\n{cliente} ({tel})\n{servico} - {data} as {hora}",
 }
 
 
@@ -61,12 +62,12 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
         if mesmo_numero(solicitante, cfg.telefone_dono):
             return  # ação do próprio dono — sem eco
 
-        servico = db.get_servico(agendamento.servico_id)
+        servico = db.nome_servico(agendamento)
         data, hora = data_e_hora_br(agendamento.inicio)
         texto = _TEMPLATES[evento].format(
             cliente=agendamento.nome_cliente,
             tel=agendamento.telefone_cliente,
-            servico=servico.nome if servico else f"serviço #{agendamento.servico_id}",
+            servico=servico or f"serviço #{agendamento.servico_id}",
             data=data,
             hora=hora,
         )

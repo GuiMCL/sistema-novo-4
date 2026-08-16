@@ -115,9 +115,7 @@
       <h3>Novo agendamento</h3>
       <form id="form-agenda" onsubmit="return atendimento.criarAgendamento(event)">
         <label>Servico</label>
-        <select name="servico_id" required>
-          {% for s in servicos %}<option value="{{ s.id }}">{{ s.nome }} (R$ {{ "%.2f"|format(s.valor) }})</option>{% endfor %}
-        </select>
+        <input type="text" name="servico" required placeholder="Ex.: Troca de óleo">
         <label>Cliente</label>
         <input type="text" name="nome_cliente" id="ag-nome" required>
         <label>Telefone</label>

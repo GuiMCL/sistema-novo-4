@@ -77,9 +77,13 @@ Dockerfile · requirements.txt
 Abertas: `listar_servicos`, `consultar_horarios_disponiveis`, `agendar`,
 `meus_agendamentos`.
 
-Dono ou próprio cliente: `reagendar`, `cancelar`, `atualizar_observacoes`
+Dono ou próprio cliente: `reagendar`, `cancelar`, `confirmar_agendamento`
+(confirma o agendamento — usado quando o cliente responde SIM ao lembrete de
+confirmação), `atualizar_observacoes`
 (anexa sintomas/detalhes a um agendamento existente — evita criar agendamento
-novo por causa de informação extra).
+novo por causa de informação extra), `atualizar_dados_veiculo`
+(anexa veículo/placa/modelo/ano a um agendamento existente — evita re-agendar
+só para informar o carro).
 
 Apenas dono: `fechar_data`, `abrir_data`, `bloquear_horario`, `criar_servico`,
 `editar_servico`, `ver_agenda_completa`.
@@ -92,6 +96,13 @@ Apenas dono: `fechar_data`, `abrir_data`, `bloquear_horario`, `criar_servico`,
   decide isso — a regra vive em `db.pode_agendar_no_dia`/`db.dia_bloqueado`.
 - `agendar` devolve um aviso se o cliente já tem agendamento ativo: só cria
   outro com `confirmar_existente=true` (confirmação explícita do cliente).
+- `consultar_horarios_disponiveis` não conta os agendamentos do próprio
+  cliente: o dia que ele já reservou aparece como `dia_ja_reservado` (não
+  lotado para ele) e, na sugestão sem data, sai em `dias_do_cliente` (nunca
+  como vaga nova).
+- Lembretes de confirmação marcam o agendamento como `aguardando_confirmacao`;
+  uma resposta "sim/confirmo/ok" é tratada como CONFIRMAÇÃO
+  (`confirmar_agendamento`), nunca como novo atendimento.
 
 ## Modelo de segurança (importante)
 

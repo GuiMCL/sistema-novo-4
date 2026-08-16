@@ -21,7 +21,7 @@
           </div>
         </td>
         <td>
-          {{ servico_nome.get(a.servico_id, '—') }}
+          {{ a.servico_nome or servico_nome.get(a.servico_id, '—') }}
           {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
         </td>
         <td class="meta">
@@ -80,20 +80,14 @@
       </div>
       <div class="row">
         <div><label>Serviço</label>
-          <select name="servico_id" id="agm-servico" required>
-            {% for s in servicos if s.ativo %}
-            <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
-            {% else %}
-            <option value="" disabled>Nenhum serviço ativo — cadastre no catálogo</option>
-            {% endfor %}
-          </select>
+          <input name="servico" id="agm-servico" required placeholder="Ex.: Troca de óleo">
         </div>
         <div><label>Data</label><input id="agm-data" type="date" required></div>
       </div>
 
       <label>Horário</label>
       <div class="agm-slots" id="agm-slots" aria-live="polite">
-        <p class="agm-slots-dica">Escolha o serviço e a data para ver os horários.</p>
+        <p class="agm-slots-dica">Escolha a data para ver os horários.</p>
       </div>
       <div class="agm-legenda" id="agm-legenda" hidden>
         <span class="agm-leg-item"><span class="agm-leg-quad livre"></span>Livre</span>

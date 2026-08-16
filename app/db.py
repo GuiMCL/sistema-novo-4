@@ -18,6 +18,7 @@ from threading import Lock
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .config import settings
@@ -228,7 +229,10 @@ class LembreteConfig(SQLModel, table=True):
 
 class Agendamento(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    servico_id: int
+    # Vínculo com o catálogo (Servico). Pode ser None quando o serviço foi
+    # digitado livre pelo painel — o nome fica em `servico_nome`.
+    servico_id: Optional[int] = None
+    servico_nome: str = ""
     telefone_cliente: str
     nome_cliente: str
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
@@ -247,6 +251,9 @@ class Agendamento(SQLModel, table=True):
     ultimo_lembrete: str = ""
     confirmado_em: str = ""
     origem: str = "bot"  # bot | painel | api
+    # 1 = um lembrete de confirmação foi enviado e ainda não houve resposta
+    # (o agente deve tratar "sim/confirmo/ok" como CONFIRMAÇÃO, não novo atendimento).
+    aguardando_confirmacao: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -322,12 +329,17 @@ def _migrar() -> None:
                 ("ultimo_lembrete", "VARCHAR NOT NULL DEFAULT ''"),
                 ("confirmado_em", "VARCHAR NOT NULL DEFAULT ''"),
                 ("origem", "VARCHAR NOT NULL DEFAULT 'bot'"),
+                ("aguardando_confirmacao", "INTEGER NOT NULL DEFAULT 0"),
+                ("servico_nome", "VARCHAR NOT NULL DEFAULT ''"),
             ]:
                 if col not in cols:
                     conn.exec_driver_sql(
                         f"ALTER TABLE agendamento ADD COLUMN {col} {tipo}"
                     )
             conn.commit()
+            # `servico_id` era NOT NULL e passou a ser opcional: SQLite não solta
+            # a restrição via ALTER, então recria a tabela (transação atômica).
+            _migrar_servico_id_anulavel(conn)
         cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(config)")}
         if cols and "avisar_dono" not in cols:
             conn.exec_driver_sql(
@@ -487,6 +499,47 @@ def set_prompt(chave: str, texto: str) -> None:
             p = Prompt(chave=chave, texto=texto)
         s.add(p)
         s.commit()
+
+
+def _migrar_servico_id_anulavel(conn) -> None:
+    """Torna `servico_id` da tabela agendamento opcional em DBs antigos.
+
+    SQLite não remove NOT NULL via ALTER; a tabela é recriada copiando as
+    colunas existentes (dinamicamente, para não perder nada) e os dados,
+    tudo na mesma transação.
+    """
+    linhas = conn.exec_driver_sql("PRAGMA table_info(agendamento)").fetchall()
+    if not linhas:
+        return
+    if any(r[1] == "servico_id" and not r[3] for r in linhas):
+        return  # já anulável (schema novo)
+    defs = []
+    colunas = []
+    for _cid, nome, tipo, notnull, dflt, pk in linhas:
+        colunas.append(nome)
+        if nome == "id":
+            defs.append("id INTEGER PRIMARY KEY")
+            continue
+        if nome == "servico_id":
+            defs.append("servico_id INTEGER")  # sem NOT NULL
+            continue
+        partes = [nome, tipo]
+        if notnull:
+            partes.append("NOT NULL")
+        if dflt is not None:
+            partes.append(f"DEFAULT {dflt}")
+        defs.append(" ".join(partes))
+    col_lista = ", ".join(colunas)
+    conn.exec_driver_sql("DROP TABLE IF EXISTS agendamento_novo")
+    conn.exec_driver_sql(
+        f"CREATE TABLE agendamento_novo ({', '.join(defs)})"
+    )
+    conn.exec_driver_sql(
+        f"INSERT INTO agendamento_novo ({col_lista}) SELECT {col_lista} FROM agendamento"
+    )
+    conn.exec_driver_sql("DROP TABLE agendamento")
+    conn.exec_driver_sql("ALTER TABLE agendamento_novo RENAME TO agendamento")
+    conn.commit()
 
 
 def _migrar_prompts() -> None:
@@ -809,6 +862,25 @@ def criar_servico(nome: str, descricao: str, valor: float, duracao_min: int) -> 
         return novo
 
 
+def obter_ou_criar_servico_por_nome(nome: str, duracao_min: int = 60) -> Servico:
+    """Acha um serviço do catálogo pelo nome (sem diferenciar maiúsculas) ou
+    cria um novo. Usado quando o dono digita o serviço livre no agendamento:
+    ele aparece no catálogo de Serviços e o agendamento fica vinculado."""
+    nome = (nome or "").strip()
+    if not nome:
+        raise ValueError("Nome do serviço vazio.")
+    with _lock, _session() as s:
+        existente = s.exec(
+            select(Servico).where(func.lower(Servico.nome) == nome.lower())
+        ).first()
+        if existente:
+            return existente
+        novo = Servico(nome=nome, descricao="", valor=0.0, duracao_min=duracao_min)
+        s.add(novo)
+        s.commit()
+        return novo
+
+
 def editar_servico(servico_id: int, **campos) -> Servico | None:
     with _lock, _session() as s:
         srv = s.get(Servico, servico_id)
@@ -928,10 +1000,18 @@ def get_agendamento(agendamento_id: int) -> Agendamento | None:
         return s.get(Agendamento, agendamento_id)
 
 
-def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) -> bool:
+def _conflita(
+    s: Session,
+    inicio: str,
+    fim: str,
+    ignorar_id: int | None = None,
+    ignorar_telefone: str | None = None,
+) -> bool:
     """Checa sobreposição com agendamentos ativos e bloqueios (usa a sessão dada).
 
     Para vagas: retorna True se NÃO há vaga livre (todas ocupadas no período).
+    `ignorar_telefone` desconsidera os agendamentos do PRÓPRIO solicitante na
+    contagem — o dia que o cliente já tem reservado não "lota" para ele.
     """
     ini = datetime.fromisoformat(inicio)
     f = datetime.fromisoformat(fim)
@@ -956,6 +1036,8 @@ def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) 
     for a in s.exec(select(Agendamento).where(Agendamento.status.in_(STATUS_VIGENTES))).all():
         if a.id == ignorar_id:
             continue
+        if ignorar_telefone and mesmo_numero(a.telefone_cliente, ignorar_telefone):
+            continue
         a_ini = datetime.fromisoformat(a.inicio)
         a_fim = datetime.fromisoformat(a.fim)
         if ini < a_fim and f > a_ini:
@@ -965,9 +1047,14 @@ def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) 
     return False
 
 
-def horario_disponivel(inicio: str, fim: str, ignorar_id: int | None = None) -> bool:
+def horario_disponivel(
+    inicio: str,
+    fim: str,
+    ignorar_id: int | None = None,
+    ignorar_telefone: str | None = None,
+) -> bool:
     with _session() as s:
-        return not _conflita(s, inicio, fim, ignorar_id)
+        return not _conflita(s, inicio, fim, ignorar_id, ignorar_telefone)
 
 
 def vaga_disponivel_auto(inicio: str, fim: str, ignorar_id: int | None = None) -> int | None:
@@ -992,17 +1079,29 @@ def vaga_disponivel_auto(inicio: str, fim: str, ignorar_id: int | None = None) -
     return None
 
 
+def nome_servico(ag) -> str:
+    """Nome exibível do serviço: texto livre digitado no painel ou catálogo."""
+    if getattr(ag, "servico_nome", ""):
+        return ag.servico_nome
+    if getattr(ag, "servico_id", None):
+        s = get_servico(ag.servico_id)
+        if s:
+            return s.nome
+    return ""
+
+
 def criar_agendamento(
-    servico_id: int,
-    telefone_cliente: str,
-    nome_cliente: str,
-    inicio: str,
-    fim: str,
+    servico_id: int | None = None,
+    telefone_cliente: str = "",
+    nome_cliente: str = "",
+    inicio: str = "",
+    fim: str = "",
     observacoes: str = "",
     veiculo: str = "",
     placa: str = "",
     modelo: str = "",
     ano: str = "",
+    servico_nome: str = "",
     usuario_id: int | None = None,
     instancia_id: int | None = None,
     origem: str = "bot",
@@ -1014,6 +1113,7 @@ def criar_agendamento(
         vaga_id = vaga_disponivel_auto(inicio, fim)
         a = Agendamento(
             servico_id=servico_id,
+            servico_nome=servico_nome,
             telefone_cliente=telefone_cliente,
             nome_cliente=nome_cliente,
             inicio=inicio,
@@ -1042,6 +1142,7 @@ def reagendar_agendamento(agendamento_id: int, novo_inicio: str, novo_fim: str) 
             return False
         a.inicio = novo_inicio
         a.fim = novo_fim
+        a.aguardando_confirmacao = 0  # lembrete anterior ficou obsoleto
         s.add(a)
         s.commit()
     return True
@@ -1053,6 +1154,7 @@ def cancelar_agendamento(agendamento_id: int) -> bool:
         if not a or a.status not in STATUS_VIGENTES:
             return False
         a.status = "cancelado"
+        a.aguardando_confirmacao = 0
         s.add(a)
         s.commit()
     return True
@@ -1079,6 +1181,35 @@ def atualizar_observacoes(agendamento_id: int, texto: str) -> Agendamento | None
         return a
 
 
+def atualizar_dados_veiculo(
+    agendamento_id: int,
+    veiculo: str | None = None,
+    placa: str | None = None,
+    modelo: str | None = None,
+    ano: str | None = None,
+) -> Agendamento | None:
+    """Atualiza os dados do veículo de um agendamento ativo (sem criar outro).
+
+    Cliente informando "Onix 2012/2013", placa etc. de um atendimento que já
+    existe vai para AQUI — nunca para um novo `agendar`.
+    """
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or a.status not in STATUS_VIGENTES:
+            return None
+        if veiculo is not None:
+            a.veiculo = (veiculo or "").strip()
+        if placa is not None:
+            a.placa = (placa or "").strip().upper()
+        if modelo is not None:
+            a.modelo = (modelo or "").strip()
+        if ano is not None:
+            a.ano = (ano or "").strip()
+        s.add(a)
+        s.commit()
+        return a
+
+
 def confirmar_agendamento(agendamento_id: int) -> bool:
     with _lock, _session() as s:
         a = s.get(Agendamento, agendamento_id)
@@ -1086,6 +1217,7 @@ def confirmar_agendamento(agendamento_id: int) -> bool:
             return False
         a.status = "confirmado"
         a.confirmado_em = datetime.now().isoformat(timespec="seconds")
+        a.aguardando_confirmacao = 0
         s.add(a)
         s.commit()
     return True

@@ -1,8 +1,9 @@
 /* Modal "Novo agendamento" do card Agendamentos: cadastro manual pelo dono.
-   Escolhe serviço + data → busca os slots (GET /admin/agenda/slots) e mostra
-   um seletor de horário em quadradinhos (livre/ocupado). O horário escolhido
-   vira o hidden `inicio` (YYYY-MM-DDTHH:MM). Envio por fetch para não tirar o
-   dono da página — sucesso recarrega, erro mostra toast sem fechar o modal.
+   Escolhe a data → busca os slots (GET /admin/agenda/slots) e mostra um
+   seletor de horário em quadradinhos (livre/ocupado). O horário escolhido
+   vira o hidden `inicio` (YYYY-MM-DDTHH:MM). O serviço é um campo aberto
+   (texto livre) enviado no form. Envio por fetch para não tirar o dono da
+   página — sucesso recarrega, erro mostra toast sem fechar o modal.
 
    O telefone é tratado por telefone.js (máscara + checagem de WhatsApp); aqui
    só cuidamos do modal, dos slots e do envio. */
@@ -18,7 +19,6 @@ if (modal) {
 
   const abrirBtn = document.getElementById('ag-novo-abrir');
   const form = document.getElementById('agm-form');
-  const servicoSel = document.getElementById('agm-servico');
   const dataInput = document.getElementById('agm-data');
   const slotsBox = document.getElementById('agm-slots');
   const legenda = document.getElementById('agm-legenda');
@@ -65,18 +65,16 @@ if (modal) {
 
   async function carregarSlots() {
     limparSelecao();
-    const servico = servicoSel.value;
     const data = dataInput.value;
-    if (!servico || !data) {
-      dica('Escolha o serviço e a data para ver os horários.');
+    if (!data) {
+      dica('Escolha a data para ver os horários.');
       return;
     }
     dica('Carregando horários…');
     let dados;
     try {
       const r = await fetch(
-        '/admin/agenda/slots?data=' + encodeURIComponent(data) +
-        '&servico_id=' + encodeURIComponent(servico),
+        '/admin/agenda/slots?data=' + encodeURIComponent(data),
       );
       if (!r.ok) throw new Error(r.status);
       dados = await r.json();
@@ -97,7 +95,6 @@ if (modal) {
     legenda.hidden = false;
   }
 
-  servicoSel.addEventListener('change', carregarSlots);
   dataInput.addEventListener('change', carregarSlots);
 
   // -------------------------------------------------------------------------
@@ -107,7 +104,7 @@ if (modal) {
   function abrir() {
     form.reset();
     limparSelecao();
-    dica('Escolha o serviço e a data para ver os horários.');
+    dica('Escolha a data para ver os horários.');
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
     form.querySelector('[name="nome_cliente"]').focus();

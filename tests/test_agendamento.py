@@ -153,6 +153,45 @@ def test_agendar_rejeita_mesmo_dia_do_agendamento_existente(seg_manha, cliente):
     assert len(db.listar_agendamentos()) == 1
 
 
+def test_disponibilidade_com_data_nao_lota_dia_proprio(seg_manha, cliente):
+    """O dia que o cliente JÁ TEM reservado não aparece lotado para ele."""
+    criar_vaga("Box 1")
+    servico = criar_servico()
+    tools.agendar(servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18")
+
+    r = tools.consultar_horarios_disponiveis(data="2026-08-18")
+    assert r["dia_ja_reservado"] is True
+    assert r["pode_agendar"] is True
+    assert r["vagas_livres"] >= 1  # a vaga do próprio dia conta como livre p/ ele
+    assert r["meus_agendamentos_no_dia"]
+
+
+def test_disponibilidade_sem_data_omite_dia_proprio(seg_manha, cliente):
+    criar_vaga("Box 1")
+    servico = criar_servico()
+    tools.agendar(servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18")
+
+    r = tools.consultar_horarios_disponiveis()
+    datas = [d["data"] for d in r["dias_disponiveis"]]
+    assert "2026-08-18" not in datas  # já é o dia do próprio cliente
+
+
+def test_dia_proprio_nao_lota_para_outro_cliente(seg_manha, cliente):
+    """Para OUTRO cliente, o dia continua lotado (vaga única ocupada)."""
+    criar_vaga("Box 1")
+    servico = criar_servico()
+    tools.agendar(servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18")
+
+    token = auth.solicitante_ctx.set("5545999990002@s.whatsapp.net")
+    try:
+        r = tools.consultar_horarios_disponiveis(data="2026-08-18")
+    finally:
+        auth.solicitante_ctx.reset(token)
+    assert r["dia_ja_reservado"] is False
+    assert r["vagas_livres"] == 0
+    assert r["dia_livre"] is False
+
+
 def test_atualizar_observacoes_anexa_sintomas(cliente):
     servico = criar_servico()
     r = tools.agendar(

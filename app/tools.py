@@ -38,12 +38,18 @@ def _agora_local() -> datetime:
 DURACAO_PADRAO = 60
 
 
-def _vagas_ocupadas_em(dia: date) -> int:
-    """Nº de agendamentos vigentes que ocupam vaga em `dia` (agendamento é por DIA INTEIRO)."""
+def _vagas_ocupadas_em(dia: date, ignorar_telefone: str | None = None) -> int:
+    """Nº de agendamentos vigentes que ocupam vaga em `dia` (agendamento é por DIA INTEIRO).
+
+    `ignorar_telefone` desconsidera os agendamentos do próprio solicitante — o
+    dia que ele já tem reservado não conta como ocupado para ele.
+    """
     prefixo = dia.isoformat()
     n = 0
     for a in db.listar_agendamentos():
         if a.inicio[:10] == prefixo and a.status in db.STATUS_VIGENTES:
+            if ignorar_telefone and mesmo_numero(a.telefone_cliente, ignorar_telefone):
+                continue
             n += 1
     return n
 
@@ -81,6 +87,7 @@ def consultar_horarios_disponiveis(
     data: str = "",
     servico_id: int | None = None,
     quantidade_dias: int = 14,
+    telefone_solicitante: str | None = None,
 ) -> dict:
     """Verifica disponibilidade de agendamento.
 
@@ -89,8 +96,12 @@ def consultar_horarios_disponiveis(
 
     - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
       `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
+      Dias que o próprio cliente JÁ TEM agendamento saem em `dias_do_cliente`
+      (marcados como dele) e NÃO aparecem como vaga livre.
     - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre, quantas
-      vagas sobram e os horários em que há capacidade.
+      vagas sobram e os horários em que há capacidade. Se o próprio cliente já
+      tem agendamento nesse dia, retorna `dia_ja_reservado: true` (o dia dele
+      não aparece lotado — ele já está reservado).
 
     `servico_id` é opcional: ajusta a duração do passo dos horários, mas NÃO
     muda a capacidade (definida pelo nº de vagas/boxes).
@@ -104,6 +115,13 @@ def consultar_horarios_disponiveis(
     vagas = db.listar_vagas()
     total_vagas = len(vagas) or 1
     nome_servico = servico.nome if servico else ""
+
+    tel = auth.requester(telefone_solicitante)
+    meus_vigentes = (
+        [a for a in db.agendamentos_do_telefone(tel) if a.status in db.STATUS_VIGENTES]
+        if tel
+        else []
+    )
 
     # Modo 1: sem data → lista os próximos dias disponíveis
     if not data.strip():
@@ -119,10 +137,14 @@ def consultar_horarios_disponiveis(
             intervalos = db.horarios_do_dia(dia.weekday())
             if not intervalos:
                 continue
+            # Dia do próprio cliente → vai só para `dias_do_cliente`, nunca
+            # aparece como vaga nova.
+            if any(a.inicio.startswith(candidato) for a in meus_vigentes):
+                continue
             ini = f"{candidato}T{intervalos[0].inicio}"
             fim = f"{candidato}T{intervalos[-1].fim}"
-            if db.horario_disponivel(ini, fim):
-                ocupadas = _vagas_ocupadas_em(dia)
+            if db.horario_disponivel(ini, fim, ignorar_telefone=tel):
+                ocupadas = _vagas_ocupadas_em(dia, ignorar_telefone=tel)
                 dias_disponiveis.append(
                     {
                         "data": candidato,
@@ -130,7 +152,29 @@ def consultar_horarios_disponiveis(
                         "vagas_livres": max(0, total_vagas - ocupadas),
                     }
                 )
-        return {"data": "", "servico": nome_servico, "dias_disponiveis": dias_disponiveis, "total_vagas": total_vagas}
+        hoje_iso = agora.date().isoformat()
+        dias_do_cliente = [
+            {
+                "data": a.inicio[:10],
+                "dia_semana": ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")[
+                    date.fromisoformat(a.inicio[:10]).weekday()
+                ],
+                "id": a.id,
+                "servico_id": a.servico_id,
+                "status": a.status,
+                "veiculo": a.veiculo,
+                "placa": a.placa,
+            }
+            for a in meus_vigentes
+            if a.inicio[:10] >= hoje_iso
+        ]
+        return {
+            "data": "",
+            "servico": nome_servico,
+            "dias_disponiveis": dias_disponiveis,
+            "dias_do_cliente": dias_do_cliente,
+            "total_vagas": total_vagas,
+        }
 
     try:
         dia = date.fromisoformat(data)
@@ -146,6 +190,18 @@ def consultar_horarios_disponiveis(
     aviso = ""
     if not pode_agendar and dia == agora.date():
         aviso = "Hoje já encerrou o expediente — não é possível agendar para hoje. Ofereça um dos próximos dias com vaga."
+
+    # O próprio solicitante já tem agendamento vigente neste dia → o dia é dele.
+    meus_no_dia = [a for a in meus_vigentes if a.inicio.startswith(data)]
+    dia_ja_reservado = bool(meus_no_dia)
+    if dia_ja_reservado:
+        aviso = (
+            "Este dia já está RESERVADO para o próprio cliente. NÃO diga que "
+            "acabaram as vagas nem ofereça como nova vaga: informe que ele já "
+            "está reservado neste dia (pode confirmar com confirmar_agendamento "
+            "ou ajustar o atendimento)."
+        )
+
     livres: list[dict] = []
     passo = timedelta(minutes=servico.duracao_min if servico else DURACAO_PADRAO)
     for janela in intervalos:
@@ -155,10 +211,12 @@ def consultar_horarios_disponiveis(
             ini = atual.isoformat(timespec="minutes")
             fim = (atual + passo).isoformat(timespec="minutes")
             if atual >= agora:
-                # Conta ocupados no período
+                # Conta ocupados no período (sem contar os do próprio solicitante)
                 ocupados = 0
                 for a in db.listar_agendamentos():
                     if a.status not in db.STATUS_VIGENTES:
+                        continue
+                    if tel and mesmo_numero(a.telefone_cliente, tel):
                         continue
                     a_ini = datetime.fromisoformat(a.inicio)
                     a_fim = datetime.fromisoformat(a.fim)
@@ -175,7 +233,19 @@ def consultar_horarios_disponiveis(
         "dia_livre": len(livres) > 0,
         "pode_agendar": pode_agendar,
         "aviso": aviso,
-        "vagas_livres": max(0, total_vagas - _vagas_ocupadas_em(dia)),
+        "dia_ja_reservado": dia_ja_reservado,
+        "meus_agendamentos_no_dia": [
+            {
+                "id": a.id,
+                "servico_id": a.servico_id,
+                "status": a.status,
+                "veiculo": a.veiculo,
+                "placa": a.placa,
+                "observacoes": a.observacoes,
+            }
+            for a in meus_no_dia
+        ],
+        "vagas_livres": max(0, total_vagas - _vagas_ocupadas_em(dia, ignorar_telefone=tel)),
         "horarios": livres,
         "total_vagas": total_vagas,
     }
@@ -303,6 +373,31 @@ def meus_agendamentos(telefone_solicitante: str | None = None) -> list[dict]:
     return [db.como_dict(a) for a in db.agendamentos_do_telefone(tel)]
 
 
+@mcp.tool()
+def confirmar_agendamento(
+    agendamento_id: int,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Confirma um agendamento (status → "confirmado").
+
+    Use quando o cliente responde SIM a um lembrete de confirmação ("sim",
+    "confirmo", "ok", "fechou") OU pede explicitamente para confirmar. Só o
+    próprio cliente (ou o dono) confirma. Isso NUNCA é um novo atendimento.
+    """
+    if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
+        return auth.NEGADO_PROPRIO
+    ag = db.get_agendamento(agendamento_id)
+    if not ag or ag.status not in db.STATUS_VIGENTES:
+        return {"erro": "Agendamento não encontrado ou não está mais ativo."}
+    if ag.status == "confirmado":
+        return {"ok": True, "ja_confirmado": True, "agendamento": db.como_dict(ag)}
+    if not db.confirmar_agendamento(agendamento_id):
+        return {"erro": "Não foi possível confirmar o agendamento."}
+    atualizado = db.get_agendamento(agendamento_id)
+    notificacoes.notificar_dono("confirmado", atualizado, auth.requester(telefone_solicitante))
+    return {"ok": True, "agendamento": db.como_dict(atualizado)}
+
+
 # ---------------------------------------------------------------------------
 # Tools DONO ou PRÓPRIO CLIENTE
 # ---------------------------------------------------------------------------
@@ -331,14 +426,14 @@ def reagendar(
     if not ag:
         return {"erro": "Agendamento não encontrado."}
     inicio_anterior = ag.inicio
-    servico = db.get_servico(ag.servico_id)
+    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
         dt_inicio = datetime.fromisoformat(novo_inicio)
     except ValueError:
         return {"erro": "Horário inválido. Use YYYY-MM-DDTHH:MM."}
     if dt_inicio < _agora_local():
         return {"erro": "Não é possível remarcar para um horário no passado."}
-    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min)
+    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min if servico else 60)
     if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
         return {"erro": "Fora do horário de funcionamento."}
     novo_fim = dt_fim.isoformat(timespec="minutes")
@@ -387,6 +482,37 @@ def atualizar_observacoes(
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
     ag = db.atualizar_observacoes(agendamento_id, texto)
+    if not ag:
+        return {"erro": "Agendamento não encontrado ou já cancelado."}
+    return {"ok": True, "agendamento": db.como_dict(ag)}
+
+
+@mcp.tool()
+def atualizar_dados_veiculo(
+    agendamento_id: int,
+    veiculo: str | None = None,
+    placa: str | None = None,
+    modelo: str | None = None,
+    ano: str | None = None,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Atualiza veículo/placa/modelo/ano de um agendamento ATIVO existente.
+
+    Use quando o cliente informa o carro de um atendimento que JÁ está
+    agendado (ex.: "Onix 2012/2013", "Placa AWG4F79") — anexa ao agendamento
+    atual, NUNCA crie outro. Só o dono ou o próprio cliente podem alterar.
+    """
+    if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
+        return auth.NEGADO_PROPRIO
+    if not any(v is not None for v in (veiculo, placa, modelo, ano)):
+        return {"erro": "Informe ao menos um dado do veículo (veiculo, placa, modelo ou ano)."}
+    ag = db.atualizar_dados_veiculo(
+        agendamento_id,
+        veiculo=veiculo,
+        placa=placa,
+        modelo=modelo,
+        ano=ano,
+    )
     if not ag:
         return {"erro": "Agendamento não encontrado ou já cancelado."}
     return {"ok": True, "agendamento": db.como_dict(ag)}
@@ -490,8 +616,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     info_ag = ""
     if agendamentos:
         ultimo = agendamentos[-1]
-        serv = db.get_servico(ultimo.servico_id)
-        nome_serv = serv.nome if serv else ""
+        nome_serv = db.nome_servico(ultimo)
         dt = (ultimo.inicio or "").replace("T", " ") if ultimo.inicio else ""
         info_ag = f" | {nome_serv} {dt}" if nome_serv else ""
     tel_fmt = formatar_internacional(tel) or tel

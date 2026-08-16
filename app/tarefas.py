@@ -85,8 +85,7 @@ async def _disparar_lembretes(agora: datetime) -> None:
 async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> None:
     """Envia um lembrete gerado por IA e incrementa o contador."""
     try:
-        servico = db.get_servico(ag.servico_id)
-        nome_servico = servico.nome if servico else "servico"
+        nome_servico = db.nome_servico(ag) or "servico"
         data, hora = data_e_hora_br(ag.inicio)
 
         system = (
@@ -123,11 +122,20 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
         instancia = whatsapp.get_instancia_do_contato(alvo)
         await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem, instancia=instancia)
 
+        # O lembrete entra na MESMA memória da conversa: quando o cliente
+        # responder "sim/confirmo/ok", o agente vê o que foi perguntado e trata
+        # como confirmação (combinado com `aguardando_confirmacao` no contexto).
+        try:
+            agente.registrar_na_memoria(alvo, mensagem, "bot")
+        except Exception:
+            log.warning("Lembrete do ag #%d: falha ao registrar na memória", ag.id)
+
         with db._lock, db._session() as s:
             a = s.get(db.Agendamento, ag.id)
             if a:
                 a.lembretes_enviados = (a.lembretes_enviados or 0) + 1
                 a.ultimo_lembrete = agora.isoformat(timespec="seconds")
+                a.aguardando_confirmacao = 1
                 s.add(a)
                 s.commit()
 
@@ -185,8 +193,7 @@ def descrever_tarefa(t: db.Tarefa) -> dict:
     ag = db.get_agendamento(payload.get("agendamento_id") or 0)
     if ag:
         nome_cliente = ag.nome_cliente
-        s = db.get_servico(ag.servico_id)
-        servico = s.nome if s else f"serviço #{ag.servico_id}"
+        servico = db.nome_servico(ag) or f"serviço #{ag.servico_id}"
         quando = ag.inicio
     titulo = _RESUMO_ACAO.get(acao, t.tipo)
     return {
@@ -206,8 +213,7 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     acao = payload.get("acao", "remarcar")
     if acao in ("remarcar", "reagendado") and ag.status not in ("ativo", "confirmado"):
         return None
-    servico = db.get_servico(ag.servico_id)
-    nome_servico = servico.nome if servico else f"serviço #{ag.servico_id}"
+    nome_servico = db.nome_servico(ag) or f"serviço #{ag.servico_id}"
     data, hora = data_e_hora_br(ag.inicio)
 
     if acao in ("remarcar", "cancelar"):

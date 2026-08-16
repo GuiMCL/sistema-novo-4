@@ -718,10 +718,9 @@ def excluir_servico(servico_id: int, _: str = Depends(autenticar)):
 
 
 @router.get("/admin/agenda/slots")
-def agenda_slots(data: str, servico_id: int, _: str = Depends(autenticar)):
-    servico = db.get_servico(servico_id)
-    if not servico:
-        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+def agenda_slots(data: str, servico_id: int | None = None, _: str = Depends(autenticar)):
+    # servico_id opcional: sem ele (serviço digitado livre) a grade usa 60min.
+    passo_min = db.get_servico(servico_id).duracao_min if servico_id and db.get_servico(servico_id) else 60
     try:
         dia = date.fromisoformat(data)
     except ValueError:
@@ -730,7 +729,7 @@ def agenda_slots(data: str, servico_id: int, _: str = Depends(autenticar)):
     if not intervalos:
         return {"slots": [], "fechado": True}
     agora = _agora_local()
-    passo = timedelta(minutes=servico.duracao_min)
+    passo = timedelta(minutes=passo_min)
     slots: list[dict] = []
     for janela in intervalos:
         atual = datetime.fromisoformat(f"{data}T{janela.inicio}")
@@ -744,11 +743,28 @@ def agenda_slots(data: str, servico_id: int, _: str = Depends(autenticar)):
     return {"slots": slots, "fechado": False}
 
 
+def _resolver_servico(servico: str, servico_id: int | None) -> tuple[int, str, int]:
+    """(servico_id, nome, duracao_min) a partir do form: id do catálogo OU texto
+    livre digitado pelo dono — o texto vira/acha um serviço no catálogo, então
+    o serviço digitado aparece em "Serviços"."""
+    if servico_id:
+        srv = db.get_servico(servico_id)
+        if not srv:
+            raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+        return srv.id, srv.nome, srv.duracao_min
+    nome = (servico or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Informe o serviço.")
+    srv = db.obter_ou_criar_servico_por_nome(nome)
+    return srv.id, srv.nome, srv.duracao_min
+
+
 @router.post("/admin/agendamento")
 def novo_agendamento(
     request: Request,
     _: db.Usuario = Depends(auth.admin_required),
-    servico_id: int = Form(...),
+    servico: str = Form(""),
+    servico_id: int | None = Form(None),
     nome_cliente: str = Form(...),
     telefone_cliente: str = Form(...),
     inicio: str = Form(...),
@@ -758,9 +774,7 @@ def novo_agendamento(
     modelo: str = Form(""),
     ano: str = Form(""),
 ):
-    servico = db.get_servico(servico_id)
-    if not servico:
-        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    servico_id, servico_nome, duracao_min = _resolver_servico(servico, servico_id)
     nome = nome_cliente.strip()
     if not nome:
         raise HTTPException(status_code=400, detail="Informe o nome do cliente.")
@@ -771,9 +785,10 @@ def novo_agendamento(
         dt_inicio = datetime.fromisoformat(inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
-    fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(timespec="minutes")
+    fim = (dt_inicio + timedelta(minutes=duracao_min)).isoformat(timespec="minutes")
     ag = db.criar_agendamento(
         servico_id=servico_id,
+        servico_nome=servico_nome,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome,
         inicio=dt_inicio.isoformat(timespec="minutes"),
@@ -818,13 +833,13 @@ def reagendar_agendamento(
     ag = db.get_agendamento(agendamento_id)
     if not ag:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
-    servico = db.get_servico(ag.servico_id)
+    servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
         dt_inicio = datetime.fromisoformat(novo_inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
     inicio_anterior = ag.inicio
-    dur = servico.duracao_min if servico else 30
+    dur = servico.duracao_min if servico else 60
     novo_fim = (dt_inicio + timedelta(minutes=dur)).isoformat(timespec="minutes")
     ok = db.reagendar_agendamento(agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim)
     if ok and avisar_cliente and _avisar_cliente_permitido(ag):
