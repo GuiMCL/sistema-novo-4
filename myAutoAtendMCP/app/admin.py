@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, auth, db, evolution, ia, tarefas
+from . import agente, auth, db, ia, tarefas, whatsapp_cloud
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import DURACAO_PADRAO, _agora_local
@@ -244,7 +244,7 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
             "n_ativos": sum(1 for s in servicos if s.ativo),
             "horarios_por_dia": horarios_por_dia,
             "n_horarios": len(horarios),
-            "evolution_url": settings.evolution_external_url,
+            "whatsapp_provider": "meta_cloud",
             "vagas": vagas,
             "lembrete": lembrete,
             "apenas_ativos": bool(ativos),
@@ -406,12 +406,6 @@ def excluir_instancia(
 ):
     inst = db.get_instancia(instancia_id)
     if inst:
-        # Apaga a sessão na Evolution (melhor esforço — se a API falhar,
-        # segue e remove do banco; o startup não recria instância apagada).
-        try:
-            evolution.deletar_instancia_evolution(inst.nome)
-        except Exception:
-            pass
         db.deletar_instancia(instancia_id)
     return RedirectResponse("/admin", status_code=303)
 
@@ -543,7 +537,7 @@ def gerar_mensagem_lembrete(
 @router.get("/admin/whatsapp/estado")
 def whatsapp_estado(_: str = Depends(autenticar)):
     try:
-        return evolution.estado()
+        return whatsapp_cloud.estado()
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -551,7 +545,7 @@ def whatsapp_estado(_: str = Depends(autenticar)):
 @router.get("/admin/whatsapp/qr")
 def whatsapp_qr(_: str = Depends(autenticar)):
     try:
-        return evolution.conectar()
+        return JSONResponse({"erro": "A Cloud API não usa QR Code. Cadastre o número no WhatsApp Manager."}, status_code=400)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -559,7 +553,7 @@ def whatsapp_qr(_: str = Depends(autenticar)):
 @router.post("/admin/whatsapp/desconectar")
 def whatsapp_desconectar(_: str = Depends(autenticar)):
     try:
-        return evolution.desconectar()
+        return JSONResponse({"erro": "Desconexão é gerenciada no WhatsApp Manager da Meta."}, status_code=400)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -567,7 +561,7 @@ def whatsapp_desconectar(_: str = Depends(autenticar)):
 @router.get("/admin/whatsapp/foto")
 def whatsapp_foto(numero: str, _: str = Depends(autenticar), instancia: str = ""):
     try:
-        return {"url": evolution.foto_perfil(numero, instancia or None)}
+        return {"url": None}
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -575,7 +569,7 @@ def whatsapp_foto(numero: str, _: str = Depends(autenticar), instancia: str = ""
 @router.get("/admin/whatsapp/checar")
 def whatsapp_checar(numero: str, _: str = Depends(autenticar), instancia: str = ""):
     try:
-        item = evolution.checar_numero(numero, instancia or None)
+        item = whatsapp_cloud.checar_numero(numero, instancia or None)
     except Exception as e:
         return JSONResponse({"erro": "Não foi possível checar o número."}, status_code=502)
     existe = bool(item and item.get("exists"))
@@ -584,7 +578,7 @@ def whatsapp_checar(numero: str, _: str = Depends(autenticar), instancia: str = 
     foto = None
     if existe and canon:
         try:
-            foto = evolution.foto_perfil(canon)
+            foto = whatsapp_cloud.foto_perfil(canon)
         except Exception:
             foto = None
     return {
@@ -606,7 +600,7 @@ def instancia_estado(instancia_id: int, _: db.Usuario = Depends(auth.login_requi
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
     try:
-        return evolution.estado_instancia(inst.nome)
+        return whatsapp_cloud.estado(inst.nome)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -617,7 +611,7 @@ def instancia_qr(instancia_id: int, _: db.Usuario = Depends(auth.login_required)
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
     try:
-        return evolution.conectar_instancia(inst.nome)
+        return JSONResponse({"erro": "A Cloud API não usa QR Code. Informe o PHONE_NUMBER_ID desta instância."}, status_code=400)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -628,7 +622,7 @@ def instancia_desconectar(instancia_id: int, _: db.Usuario = Depends(auth.login_
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
     try:
-        return evolution.desconectar_instancia(inst.nome)
+        return JSONResponse({"erro": "Desconexão é gerenciada no WhatsApp Manager da Meta."}, status_code=400)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -1065,7 +1059,7 @@ async def conversa_enviar(
     digitando_ms = int(min(0.3 + len(msg) * 0.012, 1.8) * 1000)
     instancia = get_instancia_do_contato(telefone)
     try:
-        await evolution.enviar_texto(numero, msg, digitando_ms=digitando_ms, timeout=8.0, instancia=instancia)
+        await whatsapp_cloud.enviar_texto(numero, msg, digitando_ms=digitando_ms, timeout=8.0, instancia=instancia)
     except Exception as e:
         raise HTTPException(status_code=502, detail="Não foi possível enviar pelo WhatsApp.") from e
     usuario_id = request.session.get("usuario_id")

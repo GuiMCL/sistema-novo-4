@@ -171,12 +171,12 @@ class Usuario(SQLModel, table=True):
 
 
 class InstanciaWhatsApp(SQLModel, table=True):
-    """Múltiplas instâncias Evolution conectadas simultaneamente."""
+    """Números WhatsApp Business cadastrados na Cloud API da Meta."""
     id: Optional[int] = Field(default=None, primary_key=True)
-    nome: str  # nome da instância na Evolution
+    nome: str  # PHONE_NUMBER_ID da Meta
     numero: str = ""  # E.164
     numero_fmt: str = ""  # formatado para exibição
-    provedor: str = "evolution"
+    provedor: str = "meta_cloud"
     tipo: str = "atendimento"  # "atendimento" | "cotacao"
     ativo: bool = True
     usuario_id: Optional[int] = None  # atendente designado

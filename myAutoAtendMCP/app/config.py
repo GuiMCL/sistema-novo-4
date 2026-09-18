@@ -24,32 +24,20 @@ class Settings:
     # Fuso usado nas conversões de data/hora (validação de passado, slots).
     timezone: str = os.getenv("MCP_TZ", "America/Sao_Paulo")
 
-    # Evolution API — pipeline do agente + pareamento pelo painel (rede docker).
-    evolution_api_url: str = os.getenv("EVOLUTION_API_URL", "http://evolution_api:9090")
-    evolution_api_key: str = os.getenv("EVOLUTION_API_KEY", "")
-    evolution_instance: str = os.getenv("EVOLUTION_INSTANCE", "evo_bot")
-
-    # URL deste serviço VISTA PELA EVOLUTION (rede docker) — destino do webhook.
-    webhook_url: str = os.getenv(
-        "MCP_WEBHOOK_URL",
-        "http://mcp_agendamentos:8000/webhook/whatsapp/receberMensagem",
-    )
-
-    # Token do webhook: impede forja local de eventos (remoteJid do dono).
-    # Derivado da SENHA por hash — URLs vazam em logs; o hash não devolve a
-    # senha. A Evolution entrega com ?token=...; o endpoint exige igualdade.
-    webhook_token: str = hashlib.sha256(
-        f"webhook:{admin_pass}".encode()
-    ).hexdigest()[:32]
+    # WhatsApp Cloud API (Meta). O token nunca deve ser exposto ao navegador.
+    whatsapp_graph_api_version: str = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v25.0")
+    whatsapp_access_token: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+    whatsapp_phone_number_id: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    whatsapp_verify_token: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
+    whatsapp_app_secret: str = os.getenv("WHATSAPP_APP_SECRET", "")
+    # Templates aprovados na Meta, usados para mensagens iniciadas pelo negócio.
+    whatsapp_appointment_template: str = os.getenv("WHATSAPP_APPOINTMENT_TEMPLATE", "")
+    whatsapp_appointment_template_2: str = os.getenv("WHATSAPP_APPOINTMENT_TEMPLATE_2", "")
+    whatsapp_template_language: str = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE", "pt_BR")
 
     # Seed legado da instrução geral (1º acesso ao card do painel). Vazio →
     # vale o padrão em app/agente.py; depois do 1º save, SQLite (tabela Prompt).
     agent_system_prompt: str = os.getenv("AGENT_SYSTEM_PROMPT", "")
-
-    # URL externa (browser do host) p/ atalho no painel.
-    evolution_external_url: str = os.getenv(
-        "EVOLUTION_EXTERNAL_URL", "http://localhost:9090"
-    )
 
     # Segredo para assinar cookies de sessão
     session_secret: str = os.getenv("SESSION_SECRET", "")

@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from . import agente, auth, db, evolution
+from . import agente, auth, db
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")

@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, evolution, tarefas
+from . import auth, tarefas
 from .admin import router as admin_router
 from .atendimento import router as atendimento_router
 from .config import settings
@@ -72,17 +72,10 @@ class SolicitanteMiddleware:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Garante todas as instâncias registradas no banco na Evolution
-    bootstrap = asyncio.create_task(
-        evolution.garantir_multi_instancias(
-            f"{settings.webhook_url}?token={settings.webhook_token}"
-        )
-    )
     worker = asyncio.create_task(tarefas.worker())  # ações proativas + lembretes
     async with mcp.session_manager.run():
         yield
     worker.cancel()
-    bootstrap.cancel()
 
 
 app = FastAPI(title="Revi Atende — Sistema de Agendamentos", lifespan=lifespan)

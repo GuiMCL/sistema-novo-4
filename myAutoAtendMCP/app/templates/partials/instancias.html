@@ -1,7 +1,7 @@
 <!-- ============ INSTANCIAS WHATSAPP ============ -->
 <div class="card drag-sec" data-sec="instancias">
   <div class="card-head"><span class="drag-grip">⠿</span><h2>Instancias WhatsApp</h2><span class="tag">{{ instancias|length }} ativas</span></div>
-  <p class="meta" style="padding:0 20px;margin:0 0 10px">Gerencie varios numeros de WhatsApp conectados simultaneamente. Cada instancia pode ser atribuida a um atendente. Clique em "QR Code" para parear e o status sera monitorado automaticamente.</p>
+  <p class="meta" style="padding:0 20px;margin:0 0 10px">Cada registro representa um número aprovado na Meta. Use como nome o <code>PHONE_NUMBER_ID</code> do número; não há QR Code ou pareamento.</p>
   <table class="tbl">
     <thead><tr><th>Nome</th><th>Numero</th><th>Atendente</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -65,7 +65,7 @@
     </tbody>
   </table>
   <form method="post" action="/admin/instancia" style="padding:12px 20px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px solid var(--border)">
-    <div><label>Nome da instancia</label><input name="nome" required placeholder="evo_bot_2"></div>
+    <div><label>PHONE_NUMBER_ID da Meta</label><input name="nome" required placeholder="123456789012345"></div>
     <div><label>Atendente (opcional)</label>
       <select name="usuario_id">
         <option value="0">Nenhum</option>

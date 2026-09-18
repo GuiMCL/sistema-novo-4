@@ -1,9 +1,4 @@
-"""Pipeline do WhatsApp — suporte a múltiplas instâncias.
-
-O webhook recebe eventos de N instâncias Evolution. Cada evento carrega o
-nome da instância no campo `instance`. O pipeline identifica a instância,
-atribui o contato a ela e roteia a resposta pela instância correta.
-"""
+"""Pipeline do WhatsApp Cloud API (Meta)."""
 
 from __future__ import annotations
 
@@ -11,12 +6,11 @@ import asyncio
 import logging
 import random
 import re
-import secrets
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
-from . import agente, auth, db, evolution, ia
+from . import agente, auth, db, ia, whatsapp_cloud
 from .config import settings
 from .phone import mesmo_numero
 
@@ -29,7 +23,7 @@ DEBOUNCE_S = 6.0
 _buffers: dict[str, list[str]] = {}
 _timers: dict[str, asyncio.Task] = {}
 
-# Instância associada a cada remoteJid (cache do debounce)
+# PHONE_NUMBER_ID associado a cada contato (cache do debounce)
 _instance_map: dict[str, str] = {}
 
 
@@ -38,25 +32,39 @@ _instance_map: dict[str, str] = {}
 # ---------------------------------------------------------------------------
 
 
-@router.post("/webhook/whatsapp/receberMensagem")
-async def receber_mensagem(request: Request, token: str = ""):
-    if not secrets.compare_digest(token, settings.webhook_token):
-        return JSONResponse({"erro": "token inválido"}, status_code=403)
+@router.get("/webhook/whatsapp")
+async def verificar_webhook(request: Request):
+    """Handshake exigido pela Meta ao cadastrar a URL do webhook."""
+    p = request.query_params
+    if p.get("hub.mode") == "subscribe" and p.get("hub.verify_token") == settings.whatsapp_verify_token:
+        return PlainTextResponse(p.get("hub.challenge", ""))
+    return JSONResponse({"erro": "verificação inválida"}, status_code=403)
+
+
+@router.post("/webhook/whatsapp")
+async def receber_mensagem(request: Request):
+    corpo = await request.body()
+    if not whatsapp_cloud.validar_assinatura(corpo, request.headers.get("x-hub-signature-256")):
+        return JSONResponse({"erro": "assinatura inválida"}, status_code=403)
     body = await request.json()
-    asyncio.create_task(_processar_evento(body))
+    for entry in body.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value") or {}
+            for message in value.get("messages") or []:
+                evento = {"message": message, "contacts": value.get("contacts") or [], "phone_number_id": (value.get("metadata") or {}).get("phone_number_id", "")}
+                asyncio.create_task(_processar_evento(evento))
     return {"ok": True}
 
 
 async def _processar_evento(body: dict) -> None:
     try:
-        data = body.get("data") or {}
-        key = data.get("key") or {}
-        remote_jid = key.get("remoteJid") or ""
-        if not remote_jid or key.get("fromMe"):
+        data = body.get("message") or {}
+        remote_jid = data.get("from") or ""
+        if not remote_jid:
             return
 
         # Identifica a instância que recebeu a mensagem
-        instancia_nome = body.get("instance", "")
+        instancia_nome = body.get("phone_number_id", "")
         instancia_db = None
         if instancia_nome:
             instancia_db = db.get_instancia_por_nome(instancia_nome)
@@ -128,7 +136,9 @@ async def _processar_evento(body: dict) -> None:
 
         texto = _sanitizar_entrada(texto)
 
-        db.upsert_cliente(remote_jid, data.get("pushName") or "", instancia_id=instancia_id)
+        contatos = body.get("contacts") or []
+        nome = (contatos[0].get("profile") or {}).get("name", "") if contatos else ""
+        db.upsert_cliente(remote_jid, nome, instancia_id=instancia_id)
 
         # Marca instância na memória do contato (cache)
         _instance_map[remote_jid] = instancia_nome
@@ -139,8 +149,8 @@ async def _processar_evento(body: dict) -> None:
             log.info("Bot pausado p/ %s — mensagem só gravada", remote_jid)
             return
 
-        await evolution.marcar_como_lida(
-            remote_jid, False, key.get("id") or "", instancia=instancia_nome or None
+        await whatsapp_cloud.marcar_como_lida(
+            remote_jid, False, data.get("id") or "", instancia=instancia_nome or None
         )
         _agendar_lote(remote_jid, texto)
     except Exception:
@@ -155,36 +165,26 @@ def _sanitizar_entrada(texto: str) -> str:
 
 
 async def _extrair_texto(data: dict) -> str | None:
-    tipo = data.get("messageType") or ""
-    msg = data.get("message") or {}
-    if tipo == "conversation":
-        return msg.get("conversation") or None
-    if tipo == "extendedTextMessage":
-        return (msg.get("extendedTextMessage") or {}).get("text") or None
-    if tipo in ("audioMessage", "imageMessage"):
+    tipo = data.get("type") or ""
+    if tipo == "text":
+        return (data.get("text") or {}).get("body") or None
+    if tipo in ("audio", "image"):
         b64, mime = await _base64_da_mensagem(data, tipo)
         if not b64:
             return None
         if tipo == "audioMessage":
             transcricao = await ia.transcrever_audio(b64, mime or "audio/ogg")
             return f"[Áudio transcrito] {transcricao}" if transcricao else None
-        legenda = (msg.get("imageMessage") or {}).get("caption") or ""
+        legenda = (data.get("image") or {}).get("caption") or ""
         descricao = await ia.descrever_imagem(b64, mime or "image/jpeg", legenda)
         return f"[Imagem enviada pelo cliente] {descricao}\nLegenda: {legenda}" if legenda else f"[Imagem enviada pelo cliente] {descricao}"
     return None
 
 
 async def _base64_da_mensagem(data: dict, tipo: str) -> tuple[str | None, str | None]:
-    msg = data.get("message") or {}
-    detalhe = msg.get(tipo) or {}
-    b64 = msg.get("base64")
-    mime = detalhe.get("mimetype")
-    if b64:
-        return b64, mime
-    midia = await evolution.obter_midia_base64(
-        (data.get("key") or {}).get("id") or "",
-        instancia=_instance_map.get(data.get("key", {}).get("remoteJid", "")),
-    )
+    detalhe = data.get(tipo) or {}
+    mime = detalhe.get("mime_type")
+    midia = await whatsapp_cloud.obter_midia_base64(detalhe.get("id", ""))
     return midia.get("base64"), midia.get("mimetype") or mime
 
 
@@ -229,7 +229,7 @@ async def _responder_contato(remote_jid: str, mensagem: str) -> None:
         auth.solicitante_ctx.reset(token)
 
     instancia = _instance_map.get(remote_jid)
-    await enviar_bolhas(remote_jid.split("@")[0], resposta, instancia=instancia)
+    await enviar_bolhas(remote_jid, resposta, instancia=instancia)
 
 
 def get_instancia_do_contato(telefone: str) -> str | None:
@@ -251,14 +251,14 @@ def get_instancia_do_contato(telefone: str) -> str | None:
     padrao = db.instancia_padrao()
     if padrao:
         return padrao.nome
-    return settings.evolution_instance
+    return settings.whatsapp_phone_number_id
 
 
 async def enviar_bolhas(numero: str, resposta: str, instancia: str | None = None) -> None:
     """Divide em bolhas e envia — usado pelo pipeline reativo e ações proativas."""
     for bolha in dividir_bolhas(resposta):
         segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
-        await evolution.enviar_texto(
+        await whatsapp_cloud.enviar_texto(
             numero, bolha, digitando_ms=int(segundos * 1000), instancia=instancia
         )
 

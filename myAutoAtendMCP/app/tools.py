@@ -399,7 +399,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     if not d:
         return {"erro": f"Destino '{destino}' nao encontrado. Destinos disponiveis: consulte listar_destinos_transferencia."}
     from .agente import registrar_na_memoria
-    from .evolution import enviar_texto_sync as enviar_sync
+    from .whatsapp_cloud import enviar_texto_sync as enviar_sync
     from .phone import formatar_internacional
 
     # Informacoes do cliente

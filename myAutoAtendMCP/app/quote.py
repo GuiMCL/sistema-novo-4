@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, evolution
+from . import auth, db, whatsapp_cloud
 from .consultar_placa import PlacaError, consultar_placa
 
 router = APIRouter()
@@ -474,10 +474,6 @@ async def api_criar_sessao(
         s.add(nova)
         s.commit()
         s.refresh(nova)
-    try:
-        await evolution.criar_instancia_evolution(nome)
-    except Exception:
-        pass
     return nova.model_dump()
 
 
@@ -487,7 +483,7 @@ def api_estado_sessao(sessao_id: int, u: db.Usuario = Depends(_usuario)):
     if not sessao:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
     try:
-        est = evolution.estado_instancia(sessao.nome)
+        est = whatsapp_cloud.estado(sessao.nome)
         return est
     except Exception as e:
         return {"erro": str(e), "instance": {"state": "disconnected"}}
@@ -499,8 +495,7 @@ def api_qr_sessao(sessao_id: int, u: db.Usuario = Depends(_usuario)):
     if not sessao:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
     try:
-        qr = evolution.conectar_instancia(sessao.nome)
-        return qr
+        return {"erro": "A Cloud API não usa QR Code. Cadastre o número no WhatsApp Manager."}
     except Exception as e:
         return {"erro": str(e)}
 
@@ -511,8 +506,7 @@ def api_desconectar_sessao(sessao_id: int, u: db.Usuario = Depends(_admin)):
     if not sessao:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
     try:
-        res = evolution.desconectar_instancia(sessao.nome)
-        return res
+        return {"erro": "Desconexão é gerenciada no WhatsApp Manager da Meta."}
     except Exception as e:
         return {"erro": str(e)}
 
@@ -526,7 +520,6 @@ def api_deletar_sessao(sessao_id: int, u: db.Usuario = Depends(_admin)):
         nome = sessao.nome
         s.delete(sessao)
         s.commit()
-    evolution.deletar_instancia_evolution(nome)
     return {"ok": True}
 
 
@@ -843,12 +836,8 @@ async def api_enviar_solicitacao(request_id: int, u: db.Usuario = Depends(_usuar
 
         try:
             numero_whatsapp = re.sub(r'[^0-9]', '', f.whatsapp)
-            if not numero_whatsapp.endswith("@s.whatsapp.net"):
-                remote_jid = f"{numero_whatsapp}@s.whatsapp.net"
-            else:
-                remote_jid = numero_whatsapp
-
-            await evolution.enviar_texto(remote_jid, msg, instancia=nome_instancia)
+            remote_jid = numero_whatsapp
+            await whatsapp_cloud.enviar_texto(remote_jid, msg, instancia=nome_instancia)
 
             db.registrar_mensagem_cotacao(
                 request_id=r.id, supplier_id=rs.supplier_id,

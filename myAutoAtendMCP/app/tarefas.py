@@ -11,7 +11,8 @@ import json
 import logging
 import random
 
-from . import agente, db, ia, whatsapp
+from . import agente, db, ia, whatsapp, whatsapp_cloud
+from .config import settings
 from .notificacoes import data_e_hora_br
 from .tools import _agora_local
 
@@ -140,7 +141,19 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
         instancia = whatsapp.get_instancia_do_contato(alvo)
-        await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem, instancia=instancia)
+        # Lembretes são iniciados pela empresa; a Meta exige template fora da
+        # janela de atendimento de 24h. Use os templates configurados no .env.
+        nome_template = (
+            settings.whatsapp_appointment_template_2 if stage == 1
+            else settings.whatsapp_appointment_template
+        )
+        if nome_template:
+            await whatsapp_cloud.enviar_template(
+                alvo.split("@")[0], nome_template,
+                [ag.nome_cliente, nome_servico, data], instancia=instancia,
+            )
+        else:
+            await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem, instancia=instancia)
 
         with db._lock, db._session() as s:
             a = s.get(db.Agendamento, ag.id)

@@ -2,7 +2,7 @@
 
 Template fixo em Python — não passa pela IA (custo zero, sem latência, sem
 alucinação). Envio síncrono com timeout curto: as tools rodam fora do event
-loop (threadpool), então o client sync da Evolution serve; falha de aviso
+loop (threadpool), então o client sync da Cloud API serve; falha de aviso
 NUNCA derruba a ação principal (try/except + log).
 
 Só notifica ações vindas do bot (cliente). Ação do próprio dono — pelo
@@ -17,7 +17,7 @@ import logging
 import re
 from datetime import datetime
 
-from . import db, evolution
+from . import db, whatsapp_cloud
 from .phone import mesmo_numero, normalizar
 
 log = logging.getLogger("notificacoes")
@@ -69,6 +69,6 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
             servico=servico or f"serviço #{agendamento.servico_id}",
             data=data,
         )
-        evolution.enviar_texto_sync(re.sub(r"\D", "", dono), texto)
+        whatsapp_cloud.enviar_texto_sync(re.sub(r"\D", "", dono), texto)
     except Exception:  # noqa: BLE001 — aviso é melhor-esforço
         log.exception("Falha ao notificar o dono (%s)", evento)
