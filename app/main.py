@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI
@@ -92,7 +93,12 @@ class _StaticNoCache(StaticFiles):
         return resposta
 
 
-app.mount("/static", _StaticNoCache(directory="app/static"), name="static")
+# Absoluto a partir deste arquivo, não "app/static" relativo ao CWD: o painel
+# inteiro depende disto, e um CWD diferente (systemd, `uvicorn` de outro
+# diretório, WORKDIR trocado no compose) quebrava todo o front end.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+app.mount("/static", _StaticNoCache(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/")

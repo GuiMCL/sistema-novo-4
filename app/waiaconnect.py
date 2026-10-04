@@ -10,10 +10,12 @@ Funcionalidades:
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import time
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -235,7 +237,7 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
     mandando do celular (from = seu número) e `message.status` é recibo de
     entrega — nenhum dos dois pode virar conversa de cliente.
 
-    Retorna dict com: remote_jid, texto, push_name, message_id, timestamp
+    Retorna dict com: remote_jid, texto, midia, push_name, message_id, timestamp
     ou None se não for mensagem de cliente processável.
     """
     try:
@@ -249,9 +251,14 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
             if resultado is None:
                 continue
 
+            texto = resultado["texto"]
+            if not texto:
+                texto = await _texto_da_midia(resultado["midia"])
+
             registrar_mensagem_inbound(resultado["remote_jid"])
+            resultado["texto"] = texto
             log.info(
-                "Mensagem de %s: %r", resultado["remote_jid"], resultado["texto"][:120]
+                "Mensagem de %s: %r", resultado["remote_jid"], texto[:120]
             )
             return resultado
 
@@ -261,6 +268,84 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
         log.exception("Erro processando webhook WaiaConnect")
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Mídia: download via proxy + transcrição/visão
+# ---------------------------------------------------------------------------
+
+# Teto de download. A Meta aceita áudio de até 16 MB e imagem de até 5 MB;
+# acima disso a transcrição estoura memória sem trazer informação útil.
+MEDIA_MAX_BYTES = 16 * 1024 * 1024
+
+
+async def baixar_midia(media_id: str) -> tuple[bytes, str]:
+    """Baixa a mídia em GET /v1/media/:id → (bytes, mimetype).
+
+    A WaiaConnect faz proxy dos bytes: a Meta manda id, não arquivo. Um id que
+    não pertence à sua conta (ou que expirou na Meta) responde 404.
+    """
+    if not media_id:
+        raise ValueError("media_id vazio")
+
+    async with _async_client() as c:
+        r = await c.get("/v1/media/" + quote(media_id, safe=""))
+
+    if r.status_code == 404:
+        raise RuntimeError(f"mídia {media_id} não encontrada (404) ou expirada na Meta")
+    if r.status_code >= 400:
+        raise RuntimeError(f"download da mídia falhou (HTTP {r.status_code}): {r.text[:200]}")
+    if len(r.content) > MEDIA_MAX_BYTES:
+        raise RuntimeError(
+            f"mídia de {len(r.content)} bytes excede o limite de {MEDIA_MAX_BYTES}"
+        )
+
+    return r.content, (r.headers.get("content-type") or "").split(";")[0].strip()
+
+
+async def _texto_da_midia(midia: dict[str, Any] | None) -> str:
+    """Converte a mídia em texto: áudio transcreve, imagem descreve.
+
+    Nunca levanta. Falhar aqui não pode custar a mensagem inteira — o cliente
+    ficaria sem resposta e o painel sem registro. O marcador garante que a
+    mensagem ainda chegue ao atendente.
+    """
+    if midia is None:
+        return ""
+
+    tipo = midia["tipo"]
+    legenda = midia["legenda"]
+    rotulo = "áudio" if tipo == "audio" else tipo
+
+    if tipo in ("audio", "image"):
+        try:
+            from . import ia
+
+            conteudo, mime = await baixar_midia(midia["id"])
+            b64 = base64.b64encode(conteudo).decode()
+
+            if tipo == "audio":
+                transcricao = await ia.transcrever_audio(b64, mime or "audio/ogg")
+                return _com_legenda(f"[Áudio do cliente] {transcricao}", legenda)
+
+            descricao = await ia.descrever_imagem(b64, mime or "image/jpeg", legenda)
+            return _com_legenda(f"[Imagem do cliente] {descricao}", legenda)
+
+        except Exception:
+            log.exception("Falha processando %s %s", rotulo, midia["id"])
+            return f"[{rotulo.capitalize()} recebido — não foi possível processar]"
+
+    # Tipos sem processamento de IA: mantém o registro visível no painel.
+    if tipo == "document":
+        nome = midia["filename"] or "sem nome"
+        return _com_legenda(f"[Documento do cliente: {nome}]", legenda)
+    if tipo == "sticker":
+        return "[Figurinha do cliente]"
+    return f"[{tipo.capitalize()} do cliente]"
+
+
+def _com_legenda(texto: str, legenda: str) -> str:
+    return f"{texto}\nLegenda: {legenda}" if legenda else texto
 
 
 # Evento cujo data.message é uma mensagem enviada por cliente.
@@ -336,9 +421,11 @@ def _mensagem_de_cliente(evento: dict) -> dict[str, Any] | None:
         return None
 
     texto = _extrair_texto_waiaconnect(msg)
-    if not texto:
+    midia = _midia_da_mensagem(msg)
+
+    if not texto and midia is None:
         log.info(
-            "Mensagem %s sem texto extraível — tipo=%s chaves=%s",
+            "Mensagem %s sem texto nem mídia — tipo=%s chaves=%s",
             evento.get("id"),
             msg.get("type"),
             sorted(msg),
@@ -348,6 +435,7 @@ def _mensagem_de_cliente(evento: dict) -> dict[str, Any] | None:
     return {
         "remote_jid": remote_jid,
         "texto": texto,
+        "midia": midia,
         "push_name": _nome_do_contato(data, remote_jid),
         "message_id": msg.get("id") or evento.get("id"),
         "timestamp": msg.get("timestamp") or evento.get("createdAt"),
@@ -360,6 +448,32 @@ def _nome_do_contato(data: dict, remote_jid: str) -> str:
         if isinstance(c, dict) and c.get("wa_id") == remote_jid:
             return (c.get("profile") or {}).get("name") or ""
     return ""
+
+
+# Tipos de mídia que a Meta entrega dentro de data.message.<tipo>.
+# `audio` costuma vir com voice=true (nota de voz) — mesmo tipo, mesmo
+# tratamento. `sticker` não tem id de mídia.
+_TIPOS_DE_MIDIA = ("audio", "image", "video", "document", "sticker")
+
+
+def _midia_da_mensagem(msg: dict) -> dict[str, Any] | None:
+    """Descritor da mídia de data.message, ou None se a mensagem não é mídia."""
+    tipo = msg.get("type")
+    if tipo not in _TIPOS_DE_MIDIA:
+        return None
+
+    detalhe = msg.get(tipo)
+    if not isinstance(detalhe, dict):
+        return None
+
+    return {
+        "tipo": tipo,
+        "id": detalhe.get("id") or "",
+        "mime": detalhe.get("mime_type") or "",
+        "legenda": detalhe.get("caption") or "",
+        "voice": bool(detalhe.get("voice")),
+        "filename": detalhe.get("filename") or "",
+    }
 
 
 def _extrair_texto_waiaconnect(data: dict) -> str | None:
@@ -402,7 +516,8 @@ def _extrair_texto_waiaconnect(data: dict) -> str | None:
         if lat and lng:
             return f"[Localização] {lat}, {lng}"
 
-    # Mídia (não processa aqui — só texto)
+    # Mídia não é tratada aqui — o id vai em `midia` e `_texto_da_midia` baixa,
+    # transcreve ou descreve (exige I/O, por isso é outra função).
     return None
 
 

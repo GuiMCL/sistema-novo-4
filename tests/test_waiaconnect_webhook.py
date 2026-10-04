@@ -199,18 +199,26 @@ def test_contacts_de_outro_numero_nao_vaza_nome():
     assert _processa(body)["push_name"] == ""
 
 
-def test_mensagem_sem_texto_e_descartada():
+def test_mensagem_sem_texto_e_sem_midia_e_descartada():
+    """types que não são mídia nem texto (ex.: reaction, protocol) não viram conversa."""
     body = envelope(
         {
             "message": {
-                "id": "wamid.A",
+                "id": "wamid.R",
                 "from": JID,
-                "type": "image",
-                "image": {"id": "media_1"},
+                "type": "reaction",
+                "reaction": {"emoji": "\U0001f44d", "message_id": "wamid.X"},
             }
         }
     )
     assert _processa(body) is None
+
+
+def test_midia_sem_id_vira_marcador():
+    """Sem id não há o que baixar, mas a mensagem continua visível no painel."""
+    r = _processa(envelope_midia("image", {}))
+    assert r is not None
+    assert "não foi possível processar" in r["texto"]
 
 
 def test_data_sem_message_nao_levanta():
@@ -288,3 +296,175 @@ def test_endpoint_grava_cliente_a_partir_do_envelope_real(monkeypatch):
 
     assert db.get_cliente(JID) is not None
     assert waiaconnect.dentro_da_janela_24h(JID) is True
+
+
+def envelope_midia(tipo, detalhe, extra=None):
+    msg = {"id": f"wamid.{tipo}", "from": JID, "type": tipo, tipo: detalhe}
+    if extra:
+        msg.update(extra)
+    return envelope({"message": msg, "contacts": [{"wa_id": JID, "profile": {"name": "Ana"}}]})
+
+
+class _FakeResp:
+    def __init__(self, status=200, content=b"", ctype="application/octet-stream"):
+        self.status_code = status
+        self.content = content
+        self.headers = {"content-type": ctype}
+        self.text = ""
+
+
+class _FakeClient:
+    def __init__(self, resp):
+        self.resp = resp
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, path):
+        self.calls.append(path)
+        return self.resp
+
+
+@pytest.fixture
+def ia_falsa(monkeypatch):
+    """Substitui download + IA por dublês; nada de rede."""
+    from app import ia, waiaconnect
+
+    calls = {}
+
+    async def fake_baixar(media_id):
+        calls["download"] = media_id
+        return b"BYTES", calls.get("mime", "audio/ogg")
+
+    async def fake_transcrever(b64, mimetype="audio/ogg"):
+        calls["transcrever"] = (b64, mimetype)
+        return "quero marcar um servico"
+
+    async def fake_descrever(b64, mimetype="image/jpeg", legenda=""):
+        calls["descrever"] = (b64, mimetype, legenda)
+        return "uma foto de um carro quebrado"
+
+    monkeypatch.setattr(waiaconnect, "baixar_midia", fake_baixar)
+    monkeypatch.setattr(ia, "transcrever_audio", fake_transcrever)
+    monkeypatch.setattr(ia, "descrever_imagem", fake_descrever)
+    return calls
+
+
+def test_audio_e_transcrito(ia_falsa):
+    body = envelope_midia("audio", {"id": "media_a1", "mime_type": "audio/ogg; codecs=opus", "voice": True})
+    r = _processa(body)
+    assert "quero marcar um servico" in r["texto"]
+    assert r["texto"].startswith("[Áudio do cliente]")
+    assert ia_falsa["download"] == "media_a1"
+
+
+def test_audio_nota_de_voz_usa_mime_do_download(ia_falsa):
+    ia_falsa["mime"] = "audio/mpeg"
+    body = envelope_midia("audio", {"id": "media_a2", "voice": True})
+    r = _processa(body)
+    assert ia_falsa["transcrever"][1] == "audio/mpeg"
+    assert "quero marcar" in r["texto"]
+
+
+def test_imagem_e_descrita_com_legenda(ia_falsa):
+    body = envelope_midia(
+        "image",
+        {"id": "media_i1", "mime_type": "image/jpeg", "caption": "meu carro"},
+    )
+    r = _processa(body)
+    assert "uma foto de um carro quebrado" in r["texto"]
+    assert "Legenda: meu carro" in r["texto"]
+    assert ia_falsa["descrever"][2] == "meu carro"
+
+
+def test_midia_abre_janela_de_24h(ia_falsa):
+    body = envelope_midia("audio", {"id": "media_a3"})
+    _processa(body)
+    assert waiaconnect.dentro_da_janela_24h(JID) is True
+
+
+def test_texto_tem_precedencia_sobre_midia(ia_falsa):
+    body = envelope_midia(
+        "image", {"id": "media_i2", "caption": "olha"}, extra={"text": {"body": "olha isso"}}
+    )
+    r = _processa(body)
+    assert r["texto"] == "olha isso"
+    assert "download" not in ia_falsa
+
+
+def test_falha_na_transcricao_nao_perde_a_mensagem(ia_falsa, monkeypatch):
+    from app import ia
+
+    async def boom(*a, **k):
+        raise RuntimeError("provedor sem chave")
+
+    monkeypatch.setattr(ia, "transcrever_audio", boom)
+    body = envelope_midia("audio", {"id": "media_a4"})
+    r = _processa(body)
+    assert r is not None
+    assert "não foi possível processar" in r["texto"]
+
+
+def test_download_404_nao_perde_a_mensagem(monkeypatch):
+    from app import waiaconnect as w
+
+    async def fake_baixar(media_id):
+        raise RuntimeError("mídia não encontrada (404)")
+
+    monkeypatch.setattr(w, "baixar_midia", fake_baixar)
+    r = _processa(envelope_midia("image", {"id": "sumiu"}))
+    assert "não foi possível processar" in r["texto"]
+
+
+def test_document_vira_marcador_com_nome(monkeypatch):
+    r = _processa(envelope_midia("document", {"id": "d1", "filename": "orcamento.pdf"}))
+    assert r["texto"] == "[Documento do cliente: orcamento.pdf]"
+
+
+def test_sticker_vira_marcador():
+    r = _processa(envelope_midia("sticker", {"id": "s1"}))
+    assert "Figurinha" in r["texto"]
+
+
+def test_video_vira_marcador():
+    r = _processa(envelope_midia("video", {"id": "v1"}))
+    assert "Video" in r["texto"]
+
+
+def test_baixar_midia_extrai_bytes_e_mime(monkeypatch):
+    resp = _FakeResp(200, b"\x00\x01OPUS", "audio/ogg; codecs=opus")
+    monkeypatch.setattr(waiaconnect, "_async_client", lambda: _FakeClient(resp))
+    conteudo, mime = asyncio.run(waiaconnect.baixar_midia("media_x"))
+    assert conteudo == b"\x00\x01OPUS"
+    assert mime == "audio/ogg"
+
+
+def test_baixar_midia_404_levanta(monkeypatch):
+    monkeypatch.setattr(waiaconnect, "_async_client", lambda: _FakeClient(_FakeResp(404)))
+    try:
+        asyncio.run(waiaconnect.baixar_midia("sumiu"))
+        assert False, "deveria levantar"
+    except RuntimeError as e:
+        assert "404" in str(e)
+
+
+def test_baixar_midia_acima_do_limite_levanta(monkeypatch):
+    grande = _FakeResp(200, b"x" * (waiaconnect.MEDIA_MAX_BYTES + 1), "audio/ogg")
+    monkeypatch.setattr(waiaconnect, "_async_client", lambda: _FakeClient(grande))
+    try:
+        asyncio.run(waiaconnect.baixar_midia("gigante"))
+        assert False, "deveria levantar"
+    except RuntimeError as e:
+        assert "excede o limite" in str(e)
+
+
+def test_baixar_midia_sem_id_levanta():
+    try:
+        asyncio.run(waiaconnect.baixar_midia(""))
+        assert False, "deveria levantar"
+    except ValueError:
+        pass
