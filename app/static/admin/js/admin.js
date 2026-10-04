@@ -12,5 +12,4 @@ import './telefone.js';
 import './agendamento.js';
 import './calendario.js';
 import './avatars.js';
-import './lembretes.js';
 /* gear.js e grade.js removidos — o novo layout usa paginas, nao gridstack */
