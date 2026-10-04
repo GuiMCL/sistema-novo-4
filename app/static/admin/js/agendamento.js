@@ -1,12 +1,10 @@
 /* Modal "Novo agendamento" do card Agendamentos: cadastro manual pelo dono.
-   Escolhe a data → busca os slots (GET /admin/agenda/slots) e mostra um
-   seletor de horário em quadradinhos (livre/ocupado). O horário escolhido
-   vira o hidden `inicio` (YYYY-MM-DDTHH:MM). O serviço é um campo aberto
-   (texto livre) enviado no form. Envio por fetch para não tirar o dono da
+   O atendimento é por DIA INTEIRO — escolhe a data, o backend monta o início/fim
+   do dia e auto-atribui a vaga (box). Envio por fetch para não tirar o dono da
    página — sucesso recarrega, erro mostra toast sem fechar o modal.
 
    O telefone é tratado por telefone.js (máscara + checagem de WhatsApp); aqui
-   só cuidamos do modal, dos slots e do envio. */
+   só cuidamos do modal e do envio. */
 
 import { toast } from './toast.js';
 
@@ -20,82 +18,7 @@ if (modal) {
   const abrirBtn = document.getElementById('ag-novo-abrir');
   const form = document.getElementById('agm-form');
   const dataInput = document.getElementById('agm-data');
-  const slotsBox = document.getElementById('agm-slots');
-  const legenda = document.getElementById('agm-legenda');
-  const inicioHidden = document.getElementById('agm-inicio');
   const salvarBtn = document.getElementById('agm-salvar');
-
-  // -------------------------------------------------------------------------
-  // Slots (seletor de horário)
-  // -------------------------------------------------------------------------
-
-  function dica(texto) {
-    slotsBox.innerHTML = '';
-    const p = document.createElement('p');
-    p.className = 'agm-slots-dica';
-    p.textContent = texto;
-    slotsBox.appendChild(p);
-    legenda.hidden = true;
-  }
-
-  function limparSelecao() {
-    inicioHidden.value = '';
-    slotsBox.querySelectorAll('.agm-slot.sel').forEach(el => el.classList.remove('sel'));
-  }
-
-  function selecionar(btn, hhmm) {
-    slotsBox.querySelectorAll('.agm-slot.sel').forEach(el => el.classList.remove('sel'));
-    btn.classList.add('sel');
-    inicioHidden.value = dataInput.value + 'T' + hhmm;
-  }
-
-  function quadrado(s) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'agm-slot ' + s.estado;
-    b.textContent = s.inicio;
-    if (s.estado === 'ocupado') {
-      b.disabled = true;
-      b.title = 'Horário ocupado';
-    } else {
-      b.addEventListener('click', () => selecionar(b, s.inicio));
-    }
-    return b;
-  }
-
-  async function carregarSlots() {
-    limparSelecao();
-    const data = dataInput.value;
-    if (!data) {
-      dica('Escolha a data para ver os horários.');
-      return;
-    }
-    dica('Carregando horários…');
-    let dados;
-    try {
-      const r = await fetch(
-        '/admin/agenda/slots?data=' + encodeURIComponent(data),
-      );
-      if (!r.ok) throw new Error(r.status);
-      dados = await r.json();
-    } catch (_) {
-      dica('Não foi possível carregar os horários. Tente de novo.');
-      return;
-    }
-    if (dados.fechado) {
-      dica('Dia sem expediente.');
-      return;
-    }
-    if (!dados.slots.length) {
-      dica('Nenhum horário nesta data.');
-      return;
-    }
-    slotsBox.innerHTML = '';
-    dados.slots.forEach(s => slotsBox.appendChild(quadrado(s)));
-    legenda.hidden = false;
-  }
-
-  dataInput.addEventListener('change', carregarSlots);
 
   // -------------------------------------------------------------------------
   // Abrir / fechar
@@ -103,8 +26,6 @@ if (modal) {
 
   function abrir() {
     form.reset();
-    limparSelecao();
-    dica('Escolha a data para ver os horários.');
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
     form.querySelector('[name="nome_cliente"]').focus();
@@ -129,15 +50,16 @@ if (modal) {
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!inicioHidden.value) {
-      toast('erro', 'Escolha um horário disponível para o agendamento.');
+    if (!dataInput.value) {
+      toast('erro', 'Escolha a data para o agendamento.');
       return;
     }
     salvarBtn.disabled = true;
     try {
+      const formData = new FormData(form);
       const r = await fetch(form.action, {
         method: 'POST',
-        body: new FormData(form),
+        body: formData,
         redirect: 'manual',                 // 303 vira opaqueredirect (= sucesso)
         headers: { Accept: 'application/json' },
       });

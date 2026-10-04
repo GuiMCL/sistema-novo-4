@@ -232,6 +232,9 @@ class Agendamento(SQLModel, table=True):
     # digitado livre pelo painel — o nome fica em `servico_nome`.
     servico_id: Optional[int] = None
     servico_nome: str = ""
+    # Sintoma/problema descrito pelo cliente. O agendamento pode ser feito só
+    # pelo sintoma, sem serviço escolhido — o `servico_id` é anulável.
+    descricao: str = ""
     telefone_cliente: str
     nome_cliente: str
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
@@ -330,6 +333,7 @@ def _migrar() -> None:
                 ("origem", "VARCHAR NOT NULL DEFAULT 'bot'"),
                 ("aguardando_confirmacao", "INTEGER NOT NULL DEFAULT 0"),
                 ("servico_nome", "VARCHAR NOT NULL DEFAULT ''"),
+                ("descricao", "VARCHAR NOT NULL DEFAULT ''"),
             ]:
                 if col not in cols:
                     conn.exec_driver_sql(
@@ -1082,6 +1086,7 @@ def criar_agendamento(
     modelo: str = "",
     ano: str = "",
     servico_nome: str = "",
+    descricao: str = "",
     usuario_id: int | None = None,
     instancia_id: int | None = None,
     origem: str = "bot",
@@ -1094,6 +1099,7 @@ def criar_agendamento(
         a = Agendamento(
             servico_id=servico_id,
             servico_nome=servico_nome,
+            descricao=descricao.strip(),
             telefone_cliente=telefone_cliente,
             nome_cliente=nome_cliente,
             inicio=inicio,
