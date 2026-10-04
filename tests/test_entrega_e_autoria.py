@@ -60,7 +60,6 @@ def test_erro_de_status_nao_mata_o_resto_das_bolhas(monkeypatch):
         return {"ok": True}
 
     monkeypatch.setattr(whatsapp, "enviar_inteligente", fake)
-    monkeypatch.setattr(whatsapp.asyncio, "sleep", lambda s: asyncio.sleep(0))
 
     asyncio.run(whatsapp.enviar_bolhas(TEL, "primeira[quebrar]segunda[quebrar]terceira"))
     assert enviados == ["primeira", "segunda", "terceira"]
@@ -71,7 +70,6 @@ def test_enviar_bolhas_reporta_que_nada_saiu(monkeypatch):
         raise _http_erro()
 
     monkeypatch.setattr(whatsapp, "enviar_inteligente", sempre_falha)
-    monkeypatch.setattr(whatsapp.asyncio, "sleep", lambda s: asyncio.sleep(0))
     assert asyncio.run(whatsapp.enviar_bolhas(TEL, "oi")) is False
 
 
@@ -80,7 +78,6 @@ def test_enviar_bolhas_reporta_que_saiu(monkeypatch):
         return {"ok": True}
 
     monkeypatch.setattr(whatsapp, "enviar_inteligente", ok)
-    monkeypatch.setattr(whatsapp.asyncio, "sleep", lambda s: asyncio.sleep(0))
     assert asyncio.run(whatsapp.enviar_bolhas(TEL, "oi")) is True
 
 
@@ -89,7 +86,6 @@ def test_value_error_fora_da_janela_tambem_e_engolido(monkeypatch):
         raise ValueError("Fora da janela de 24h")
 
     monkeypatch.setattr(whatsapp, "enviar_inteligente", sem_template)
-    monkeypatch.setattr(whatsapp.asyncio, "sleep", lambda s: asyncio.sleep(0))
     assert asyncio.run(whatsapp.enviar_bolhas(TEL, "oi")) is False
 
 
@@ -101,14 +97,14 @@ def test_value_error_fora_da_janela_tambem_e_engolido(monkeypatch):
 def test_mensagem_do_atendente_fica_do_lado_do_bot():
     """Bug 3: papel "Admin (atendente)" caía no else e virava fala do cliente."""
     agente.registrar_na_memoria(TEL, "sou o atendente", "Atendente (atendente)")
-    bolhas = agente.historico_para_bolhas(db.get_conversa(TEL))
+    bolhas = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(TEL)))
     assert bolhas[-1]["quem"] == "bot"
     assert bolhas[-1]["texto"] == "sou o atendente"
 
 
 def test_fala_do_cliente_continua_do_lado_do_cliente():
-    agente.registrar_na_memoria(TEL, "quero agendar", "cliente")
-    bolhas = agente.historico_para_bolhas(db.get_conversa(TEL))
+    agente.registrar_na_memoria(db.resolver_chave_conversa(TEL), "quero agendar", "cliente")
+    bolhas = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(TEL)))
     assert bolhas[-1]["quem"] == "cliente"
 
 
@@ -122,7 +118,7 @@ def test_painel_grava_mesmo_quando_o_envio_falha(painel, monkeypatch):
     r = painel.post(f"/atendimento/api/conversas/{TEL}/enviar", data={"texto": "sua OS está pronta"})
     assert r.status_code == 502
 
-    bolhas = agente.historico_para_bolhas(db.get_conversa(TEL))
+    bolhas = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(TEL)))
     assert bolhas, "a mensagem do atendente não foi gravada"
     assert bolhas[-1]["quem"] == "bot"
     assert bolhas[-1]["texto"] == "sua OS está pronta"
@@ -140,7 +136,7 @@ def test_painel_grava_e_manda_quando_o_envio_da_certo(painel, monkeypatch):
     assert r.status_code == 200
     assert enviados == [(TEL, "passando ai")]
 
-    bolhas = agente.historico_para_bolhas(db.get_conversa(TEL))
+    bolhas = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(TEL)))
     assert bolhas[-1]["quem"] == "bot"
 
 
@@ -172,7 +168,7 @@ def test_lembrete_nao_marca_confirmacao_sem_entrega(monkeypatch):
     monkeypatch.setattr(whatsapp, "enviar_bolhas", nao_entrega)
     monkeypatch.setattr(tarefas.ia, "completar", _completar_fake("Lembra de confirmar?"))
 
-    asyncio.run(tarefas._disparar_lembrete(ag, 0))
+    asyncio.run(tarefas._enviar_lembrete(ag, 0, _futuro()))
 
     assert db.get_agendamento(ag.id).aguardando_confirmacao == 0
     assert (db.get_agendamento(ag.id).lembretes_enviados or 0) == 0
@@ -194,7 +190,7 @@ def test_lembrete_marca_confirmacao_quando_entrega(monkeypatch):
     monkeypatch.setattr(whatsapp, "enviar_bolhas", entrega)
     monkeypatch.setattr(tarefas.ia, "completar", _completar_fake("Lembra de confirmar?"))
 
-    asyncio.run(tarefas._disparar_lembrete(ag, 0))
+    asyncio.run(tarefas._enviar_lembrete(ag, 0, _futuro()))
 
     atualizado = db.get_agendamento(ag.id)
     assert atualizado.aguardando_confirmacao == 1
@@ -209,6 +205,12 @@ def _completar_fake(resposta):
     async def fake(system, user, **k):
         return resposta
     return fake
+
+
+def _futuro():
+    from datetime import datetime, timedelta
+
+    return datetime.now() + timedelta(hours=1)
 
 
 # ---------------------------------------------------------------------------

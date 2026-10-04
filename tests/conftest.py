@@ -35,6 +35,17 @@ def data_futura():
 
 @pytest.fixture(autouse=True)
 def banco_limpo():
+    """Limpa as tabelas entre testes e devolve os horários ao estado original.
+
+    HorarioFuncionamento ficou de fora da limpeza de propósito (é configuração,
+    não dado de teste) — mas aí qualquer teste que chame `substituir_horarios`
+    vazava expediente para os próximos e quebrava `test_expediente.py`. O
+    estado inicial é capturado uma vez e restaurado após cada teste.
+    """
+    global _HORARIOS_INICIAIS
+    if _HORARIOS_INICIAIS is None:
+        _HORARIOS_INICIAIS = [(h.dia_semana, h.inicio, h.fim) for h in db.listar_horarios()]
+
     with db._lock, db._session() as s:
         for t in (db.Agendamento, db.Bloqueio, db.Tarefa, db.Servico, db.Vaga, db.Cliente, db.Conversa):
             for o in s.exec(select(t)).all():
@@ -42,6 +53,7 @@ def banco_limpo():
         s.commit()
     db.update_config(avisar_dono=False)
     yield
+    db.substituir_horarios(_HORARIOS_INICIAIS)
 
 
 @pytest.fixture

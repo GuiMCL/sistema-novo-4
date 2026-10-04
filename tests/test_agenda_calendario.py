@@ -276,3 +276,51 @@ def test_coluna_descricao_existe_no_banco():
     with db._session() as s:
         cols = {c["name"] for c in inspect(Session.get_bind(s, db.Agendamento)).get_columns("agendamento")}
     assert "descricao" in cols
+
+
+# ---------------------------------------------------------------------------
+# Grafo de módulos do front
+# ---------------------------------------------------------------------------
+
+
+def test_todo_import_de_admin_js_existe_em_disco():
+    """Um `import` de arquivo ausente quebra o grafo INTEIRO de ES modules:
+    o navegador não executa nenhum outro import do admin.js e o painel morre
+    sem erro visível — só o 404 do módulo faltando no log. Já aconteceu com
+    lembretes.js."""
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+    fonte = (raiz / "admin.js").read_text(encoding="utf-8")
+    faltando = [
+        m for m in re.findall(r"import\s+'\./([^']+)'", fonte)
+        if not (raiz / m).is_file()
+    ]
+    assert faltando == [], f"admin.js importa módulo inexistente: {faltando}"
+
+
+def test_calendario_e_agendamento_entram_no_admin_js():
+    """O calendário e o agendamento manual são carregados por admin.js."""
+    import pathlib
+
+    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+    fonte = (raiz / "admin.js").read_text(encoding="utf-8")
+    assert "import './calendario.js';" in fonte
+    assert "import './agendamento.js';" in fonte
+
+
+def test_ids_usados_pelo_js_existem_no_html_da_agenda(painel):
+    """Cada getElementById do JS precisa achar o elemento no HTML renderizado.
+    Sem optional chaining, um id faltando joga o módulo inteiro fora."""
+    import pathlib
+    import re
+
+    h = painel.get("/admin/agenda").text
+    ids_html = set(re.findall(r'id="([^"]+)"', h))
+    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+
+    for nome in ("agendamento.js", "calendario.js"):
+        fonte = (raiz / nome).read_text(encoding="utf-8")
+        for elemento in set(re.findall(r"getElementById\('([^']+)'\)", fonte)):
+            assert elemento in ids_html, f"{nome} procura #{elemento}, que não existe no HTML"

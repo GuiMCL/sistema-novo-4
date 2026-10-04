@@ -161,8 +161,7 @@ def api_conversa_detalhe(telefone: str, _: db.Usuario = Depends(auth.login_requi
 @router.post("/atendimento/api/conversas/{telefone}/enviar")
 async def api_conversa_enviar(
     telefone: str,
-    request: Request,
-    _: db.Usuario = Depends(auth.login_required),
+    usuario: db.Usuario = Depends(auth.login_required),
     texto: str = Form(...),
 ):
     """Envia mensagem manual pelo WhatsApp."""
@@ -175,7 +174,6 @@ async def api_conversa_enviar(
     if not numero:
         raise HTTPException(status_code=400, detail="Telefone inválido.")
 
-    usuario = auth.login_required(request)
     nome_atendente = usuario.nome if usuario else "bot"
 
     # Grava ANTES de enviar. Se o envio falhar (template fora da janela de 24h
