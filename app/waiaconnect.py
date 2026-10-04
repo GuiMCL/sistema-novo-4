@@ -230,50 +230,20 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
     ou None se não for mensagem de cliente processável.
     """
     try:
-        # Estrutura típica do webhook WaiaConnect
-        # Pode vir como array de eventos ou evento único
-        events = body if isinstance(body, list) else [body]
+        eventos = _achatar_eventos(body)
+        log.info("Webhook WaiaConnect: %d evento(s) — chaves=%s", len(eventos), _resumo(body))
 
-        for event in events:
-            # Verifica se é mensagem inbound (do cliente)
-            direction = event.get("direction") or event.get("type")
-            if direction not in ("inbound", "message_received", "messages.upsert"):
+        for evento in eventos:
+            resultado = _mensagem_de_evento(evento)
+            if not resultado:
                 continue
-
-            data = event.get("data") or event.get("message") or event
-            from_field = (
-                data.get("from")
-                or data.get("from_number")
-                or data.get("remoteJid")
-                or data.get("contact", {}).get("wa_id")
+            registrar_mensagem_inbound(resultado["remote_jid"])
+            log.info(
+                "Mensagem de %s: %r", resultado["remote_jid"], resultado["texto"][:120]
             )
+            return resultado
 
-            if not from_field:
-                continue
-
-            # Marca janela de 24h
-            registrar_mensagem_inbound(from_field)
-
-            # Extrai texto
-            texto = _extrair_texto_waiaconnect(data)
-            if not texto:
-                continue
-
-            push_name = (
-                data.get("pushName")
-                or data.get("contact", {}).get("profile", {}).get("name")
-                or ""
-            )
-            message_id = data.get("id") or data.get("message_id") or data.get("key", {}).get("id")
-            timestamp = data.get("timestamp") or data.get("time")
-
-            return {
-                "remote_jid": from_field,
-                "texto": texto,
-                "push_name": push_name,
-                "message_id": message_id,
-                "timestamp": timestamp,
-            }
+        log.info("Webhook WaiaConnect: nenhum evento de cliente reconhecido")
 
     except Exception:
         log.exception("Erro processando webhook WaiaConnect")
@@ -281,11 +251,132 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
     return None
 
 
+def _resumo(body: Any) -> list[str]:
+    """Chaves do topo do body — suficiente para diagnosticar formato novo."""
+    return sorted(body) if isinstance(body, dict) else [type(body).__name__]
+
+
+def _achatar_eventos(body: Any) -> list[dict]:
+    """Achata o body numa lista de eventos.
+
+    Aceita evento único, lista de eventos e o envelope do WhatsApp Cloud API
+    (entry[].changes[].value), que é o formato de um provider Meta. Só entram
+    `changes` com field="messages"; `statuses` (entrega/sentido) e os demais
+    fields não são mensagens de cliente.
+    """
+    if isinstance(body, list):
+        return [e for e in body if isinstance(e, dict)]
+
+    if not isinstance(body, dict):
+        return []
+
+    entry = body.get("entry")
+    if not isinstance(entry, list):
+        return [body]
+
+    achatados: list[dict] = []
+    for e in entry:
+        if not isinstance(e, dict):
+            continue
+        changes = e.get("changes")
+        if not isinstance(changes, list):
+            achatados.append(e)
+            continue
+        for change in changes:
+            if not isinstance(change, dict) or change.get("field") != "messages":
+                continue
+            value = change.get("value")
+            if isinstance(value, dict):
+                achatados.append(value)
+    return achatados
+
+
+_DIRECOES_INBOUND = ("inbound", "message_received", "messages.upsert")
+
+
+def _mensagem_de_evento(data: dict) -> dict[str, Any] | None:
+    """Extrai a mensagem de um evento já achatado."""
+    # Envelope Meta: value.messages[]. Statuses e fromMe não são inbound.
+    if isinstance(data.get("messages"), list):
+        nomes = {
+            c.get("wa_id"): (c.get("profile") or {}).get("name", "")
+            for c in data.get("contacts", [])
+            if isinstance(c, dict)
+        }
+        for msg in data["messages"]:
+            if not isinstance(msg, dict) or msg.get("fromMe"):
+                continue
+            texto = _extrair_texto_waiaconnect(msg)
+            remote_jid = msg.get("from") or ""
+            if not texto or not remote_jid:
+                continue
+            return {
+                "remote_jid": remote_jid,
+                "texto": texto,
+                "push_name": nomes.get(remote_jid, "") or "",
+                "message_id": msg.get("id") or "",
+                "timestamp": msg.get("timestamp"),
+            }
+        return None
+
+    return _mensagem_do_formato_direto(data)
+
+
+def _mensagem_do_formato_direto(data: dict) -> dict[str, Any] | None:
+    """Payload sem envelope: o próprio evento é a mensagem.
+
+    `type` NÃO é lido como direção. Na API de envio da WaiaConnect `type` é o
+    tipo do conteúdo ("text", "template"), então usá-lo como filtro descartava
+    toda mensagem de texto. A direção, quando presente, é `direction`.
+    """
+    direction = data.get("direction")
+    if direction is not None and direction not in _DIRECOES_INBOUND:
+        log.info("Evento ignorado: direction=%r fora de %s", direction, _DIRECOES_INBOUND)
+        return None
+
+    aninhado = data.get("data")
+    if isinstance(aninhado, dict):
+        data = aninhado
+
+    remote_jid = (
+        data.get("from")
+        or data.get("from_number")
+        or data.get("remoteJid")
+        or (data.get("contact") or {}).get("wa_id")
+    )
+    if not remote_jid:
+        log.info("Evento ignorado: sem remetente — chaves=%s", sorted(data))
+        return None
+
+    texto = _extrair_texto_waiaconnect(data)
+    if not texto:
+        log.info("Evento ignorado: sem texto extraível — chaves=%s", sorted(data))
+        return None
+
+    return {
+        "remote_jid": remote_jid,
+        "texto": texto,
+        "push_name": (
+            data.get("pushName")
+            or (data.get("contact") or {}).get("profile", {}).get("name")
+            or ""
+        ),
+        "message_id": data.get("id")
+        or data.get("message_id")
+        or (data.get("key") or {}).get("id"),
+        "timestamp": data.get("timestamp") or data.get("time"),
+    }
+
+
 def _extrair_texto_waiaconnect(data: dict) -> str | None:
     """Extrai texto da mensagem conforme formato WaiaConnect."""
-    # Texto simples
-    if data.get("text") and isinstance(data["text"], dict):
-        return data["text"].get("body")
+    # Texto simples — `text` como objeto (formato de envio) ou como string
+    texto = data.get("text")
+    if isinstance(texto, dict):
+        body = texto.get("body")
+        return body if isinstance(body, str) and body else None
+    if isinstance(texto, str) and texto:
+        return texto
 
     # Tipo messageType estilo Evolution
     msg_type = data.get("type") or data.get("messageType")
