@@ -33,6 +33,10 @@ class Settings:
     # WaiaConnect. Independe da senha do admin: trocar SENHA não derruba o webhook.
     waiaconnect_connect_token: str = os.getenv("WAIACONNECT_CONNECT_TOKEN", "")
 
+    # Segredo da assinatura HMAC do webhook (whsec_..., mostrado uma única vez
+    # na criação do endpoint). Vazio = não valida assinatura, só o token estático.
+    waiaconnect_webhook_secret: str = os.getenv("WAIACONNECT_WEBHOOK_SECRET", "")
+
     # URL deste serviço VISTA PELA WAIA CONNECT (rede docker/host) — destino do webhook.
     webhook_url: str = os.getenv(
         "MCP_WEBHOOK_URL",

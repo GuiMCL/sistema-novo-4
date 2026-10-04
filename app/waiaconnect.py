@@ -224,26 +224,38 @@ async def enviar_inteligente(
 
 
 async def processar_webhook(body: dict) -> dict[str, Any] | None:
-    """Processa webhook da WaiaConnect e extrai mensagem do cliente.
+    """Processa webhook da WaiaConnect e extrai mensagem de cliente.
+
+    O envelope da WaiaConnect é versionado e NÃO é o payload cru da Meta:
+
+        {id, type, version, createdAt, connection, sequence,
+         data: {message: {...}, contacts: [{wa_id, profile: {name}}]}}
+
+    Só `type == "message.received"` entra no agente. `message.echo` é o dono
+    mandando do celular (from = seu número) e `message.status` é recibo de
+    entrega — nenhum dos dois pode virar conversa de cliente.
 
     Retorna dict com: remote_jid, texto, push_name, message_id, timestamp
     ou None se não for mensagem de cliente processável.
     """
     try:
-        eventos = _achatar_eventos(body)
-        log.info("Webhook WaiaConnect: %d evento(s) — chaves=%s", len(eventos), _resumo(body))
-
-        for evento in eventos:
-            resultado = _mensagem_de_evento(evento)
-            if not resultado:
+        for evento in _eventos_do_body(body):
+            tipo = evento.get("type")
+            if tipo != EVENTO_MENSAGEM_RECEBIDA:
+                _logar_evento_ignorado(tipo, evento.get("id"))
                 continue
+
+            resultado = _mensagem_de_cliente(evento)
+            if resultado is None:
+                continue
+
             registrar_mensagem_inbound(resultado["remote_jid"])
             log.info(
                 "Mensagem de %s: %r", resultado["remote_jid"], resultado["texto"][:120]
             )
             return resultado
 
-        log.info("Webhook WaiaConnect: nenhum evento de cliente reconhecido")
+        log.info("Webhook WaiaConnect: nenhum evento %s", EVENTO_MENSAGEM_RECEBIDA)
 
     except Exception:
         log.exception("Erro processando webhook WaiaConnect")
@@ -251,121 +263,103 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
     return None
 
 
-def _resumo(body: Any) -> list[str]:
-    """Chaves do topo do body — suficiente para diagnosticar formato novo."""
-    return sorted(body) if isinstance(body, dict) else [type(body).__name__]
+# Evento cujo data.message é uma mensagem enviada por cliente.
+EVENTO_MENSAGEM_RECEBIDA = "message.received"
+
+# Os 21 eventos da WaiaConnect que NÃO são mensagem de cliente. Sem esta lista
+# o parser aceitaria qualquer coisa; `history.batch` em particular traria meses
+# de conversa antiga e faria o bot responder mensagens do passado.
+_EVENTOS_IGNORADOS = frozenset(
+    {
+        "message.echo",
+        "message.status",
+        "connection.created",
+        "connection.status_changed",
+        "connection.usage_threshold_reached",
+        "usage.threshold_reached",
+        "history.synced",
+        "history.batch",
+        "history.completed",
+        "history.dropped",
+        "template.status_changed",
+        "template.draft_submitted",
+        "account.trial_warning",
+        "account.trial_expired",
+        "subscription.activated",
+        "subscription.cancelled",
+        "billing.payment_failed",
+        "billing.payment_recovered",
+        "billing.amount_updated",
+        "webhook.test",
+    }
+)
 
 
-def _achatar_eventos(body: Any) -> list[dict]:
-    """Achata o body numa lista de eventos.
+def _logar_evento_ignorado(tipo: Any, evento_id: Any) -> None:
+    if tipo == "message.echo":
+        log.info("Ignorando message.echo (dono mandou do celular) — evento %s", evento_id)
+    elif tipo in _EVENTOS_IGNORADOS:
+        log.info("Evento %s ignorado — evento %s", tipo, evento_id)
+    else:
+        log.warning("Evento desconhecido: type=%r — evento %s", tipo, evento_id)
 
-    Aceita evento único, lista de eventos e o envelope do WhatsApp Cloud API
-    (entry[].changes[].value), que é o formato de um provider Meta. Só entram
-    `changes` com field="messages"; `statuses` (entrega/sentido) e os demais
-    fields não são mensagens de cliente.
+
+def _eventos_do_body(body: Any) -> list[dict]:
+    """Envelopes do body: array de envelopes ou um envelope único.
+
+    Não há tentativa de ler o payload cru da Meta: a WaiaConnect Embrulha
+    (docs: "the envelope is not Meta's raw payload") e o envelope Meta traz
+    várias mensagens por evento, o que não cabe no retorno único daqui.
     """
     if isinstance(body, list):
         return [e for e in body if isinstance(e, dict)]
-
-    if not isinstance(body, dict):
-        return []
-
-    entry = body.get("entry")
-    if not isinstance(entry, list):
+    if isinstance(body, dict):
         return [body]
-
-    achatados: list[dict] = []
-    for e in entry:
-        if not isinstance(e, dict):
-            continue
-        changes = e.get("changes")
-        if not isinstance(changes, list):
-            achatados.append(e)
-            continue
-        for change in changes:
-            if not isinstance(change, dict) or change.get("field") != "messages":
-                continue
-            value = change.get("value")
-            if isinstance(value, dict):
-                achatados.append(value)
-    return achatados
+    return []
 
 
-_DIRECOES_INBOUND = ("inbound", "message_received", "messages.upsert")
-
-
-def _mensagem_de_evento(data: dict) -> dict[str, Any] | None:
-    """Extrai a mensagem de um evento já achatado."""
-    # Envelope Meta: value.messages[]. Statuses e fromMe não são inbound.
-    if isinstance(data.get("messages"), list):
-        nomes = {
-            c.get("wa_id"): (c.get("profile") or {}).get("name", "")
-            for c in data.get("contacts", [])
-            if isinstance(c, dict)
-        }
-        for msg in data["messages"]:
-            if not isinstance(msg, dict) or msg.get("fromMe"):
-                continue
-            texto = _extrair_texto_waiaconnect(msg)
-            remote_jid = msg.get("from") or ""
-            if not texto or not remote_jid:
-                continue
-            return {
-                "remote_jid": remote_jid,
-                "texto": texto,
-                "push_name": nomes.get(remote_jid, "") or "",
-                "message_id": msg.get("id") or "",
-                "timestamp": msg.get("timestamp"),
-            }
+def _mensagem_de_cliente(evento: dict) -> dict[str, Any] | None:
+    """Extrai a mensagem do data.message de um envelope message.received."""
+    data = evento.get("data")
+    if not isinstance(data, dict):
+        log.info("Evento %s sem data utilizável — chaves=%s", evento.get("id"), sorted(evento))
         return None
 
-    return _mensagem_do_formato_direto(data)
-
-
-def _mensagem_do_formato_direto(data: dict) -> dict[str, Any] | None:
-    """Payload sem envelope: o próprio evento é a mensagem.
-
-    `type` NÃO é lido como direção. Na API de envio da WaiaConnect `type` é o
-    tipo do conteúdo ("text", "template"), então usá-lo como filtro descartava
-    toda mensagem de texto. A direção, quando presente, é `direction`.
-    """
-    direction = data.get("direction")
-    if direction is not None and direction not in _DIRECOES_INBOUND:
-        log.info("Evento ignorado: direction=%r fora de %s", direction, _DIRECOES_INBOUND)
+    msg = data.get("message")
+    if not isinstance(msg, dict):
+        log.info("Evento %s sem data.message — chaves=%s", evento.get("id"), sorted(data))
         return None
 
-    aninhado = data.get("data")
-    if isinstance(aninhado, dict):
-        data = aninhado
-
-    remote_jid = (
-        data.get("from")
-        or data.get("from_number")
-        or data.get("remoteJid")
-        or (data.get("contact") or {}).get("wa_id")
-    )
+    remote_jid = msg.get("from") or ""
     if not remote_jid:
-        log.info("Evento ignorado: sem remetente — chaves=%s", sorted(data))
+        log.info("Evento %s sem data.message.from", evento.get("id"))
         return None
 
-    texto = _extrair_texto_waiaconnect(data)
+    texto = _extrair_texto_waiaconnect(msg)
     if not texto:
-        log.info("Evento ignorado: sem texto extraível — chaves=%s", sorted(data))
+        log.info(
+            "Mensagem %s sem texto extraível — tipo=%s chaves=%s",
+            evento.get("id"),
+            msg.get("type"),
+            sorted(msg),
+        )
         return None
 
     return {
         "remote_jid": remote_jid,
         "texto": texto,
-        "push_name": (
-            data.get("pushName")
-            or (data.get("contact") or {}).get("profile", {}).get("name")
-            or ""
-        ),
-        "message_id": data.get("id")
-        or data.get("message_id")
-        or (data.get("key") or {}).get("id"),
-        "timestamp": data.get("timestamp") or data.get("time"),
+        "push_name": _nome_do_contato(data, remote_jid),
+        "message_id": msg.get("id") or evento.get("id"),
+        "timestamp": msg.get("timestamp") or evento.get("createdAt"),
     }
+
+
+def _nome_do_contato(data: dict, remote_jid: str) -> str:
+    """Nome do pushName via data.contacts[].profile.name."""
+    for c in data.get("contacts") or []:
+        if isinstance(c, dict) and c.get("wa_id") == remote_jid:
+            return (c.get("profile") or {}).get("name") or ""
+    return ""
 
 
 def _extrair_texto_waiaconnect(data: dict) -> str | None:

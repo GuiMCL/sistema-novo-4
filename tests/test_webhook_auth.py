@@ -5,6 +5,8 @@ precisa aceitá-lo sem exigir assinatura HMAC válida (que usa outra chave) nem
 o ?token= derivado da senha do admin.
 """
 
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,7 @@ from app.config import settings
 from app.main import app
 
 TOKEN_PAINEL = "wct_92756a083c636389e84b481b3dc8ac5337f5a40b00ec42f05ca2803c9e97cd99"
+SEGREDO = "whsec_endpoint_secret"
 
 
 @pytest.fixture
@@ -62,19 +65,122 @@ def test_query_param_legado_continua_valendo(client):
     assert r.status_code == 200, r.text
 
 
-def test_assinatura_hmac_valida_continua_valendo(client, monkeypatch):
+def _assina(secret: str, corpo: bytes, timestamp: str) -> str:
+    """X-Connect-Signature-256 conforme a spec: sha256=HMAC(secret, "ts.body")."""
     import hashlib
     import hmac
 
-    corpo = b'{"evento":"x"}'
-    esperado = hmac.new(settings.webhook_token.encode(), corpo, hashlib.sha256).hexdigest()
-    monkeypatch.setattr(whatsapp, "_processar_evento_waiaconnect", _nao_processa)
-    r = client.post(
-        "/webhook/waiaconnect",
-        content=corpo,
-        headers={"Content-Type": "application/json", "X-Hub-Signature-256": f"sha256={esperado}"},
-    )
-    assert r.status_code == 200, r.text
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + corpo, hashlib.sha256)
+    return f"sha256={mac.hexdigest()}"
+
+
+def _req_headers(secret: str, corpo: bytes, timestamp: str) -> dict:
+    return {
+        "Content-Type": "application/json",
+        "X-Connect-Timestamp": timestamp,
+        "X-Connect-Signature-256": _assina(secret, corpo, timestamp),
+    }
+
+
+def test_assinatura_valida_autoriza_sem_token_estatico(monkeypatch):
+    """Com WAIACONNECT_WEBHOOK_SECRET, a assinatura sozinha basta."""
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.main import app
+
+    class _FakeTask:
+        def __init__(self, coro):
+            coro.close()
+
+    monkeypatch.setattr(whatsapp.asyncio, "create_task", _FakeTask)
+    monkeypatch.setattr(settings, "waiaconnect_webhook_secret", SEGREDO)
+    monkeypatch.setattr(settings, "waiaconnect_connect_token", "")
+
+    corpo = b'{"id":"evt_1","type":"message.received"}'
+    ts = str(int(time.time()))
+    client = TestClient(app)
+    assert client.post("/webhook/waiaconnect", content=corpo, headers=_req_headers(SEGREDO, corpo, ts)).status_code == 200
+
+    # Sem assinatura nem token: recusado.
+    assert client.post("/webhook/waiaconnect", json={}).status_code == 403
+
+
+def test_assinatura_com_corpo_adulterado_e_recusada(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.main import app
+
+    class _FakeTask:
+        def __init__(self, coro):
+            coro.close()
+
+    monkeypatch.setattr(whatsapp.asyncio, "create_task", _FakeTask)
+    monkeypatch.setattr(settings, "waiaconnect_webhook_secret", SEGREDO)
+    monkeypatch.setattr(settings, "waiaconnect_connect_token", "")
+
+    ts = str(int(time.time()))
+    headers = _req_headers(SEGREDO, b'{"original":true}', ts)
+    client = TestClient(app)
+    # Mesmos headers, corpo diferente: o hash não bate mais.
+    r = client.post("/webhook/waiaconnect", content=b'{"adulterado":true}', headers=headers)
+    assert r.status_code == 403
+
+
+def test_assinatura_fora_da_janela_de_replay_e_recusada(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.main import app
+
+    class _FakeTask:
+        def __init__(self, coro):
+            coro.close()
+
+    monkeypatch.setattr(whatsapp.asyncio, "create_task", _FakeTask)
+    monkeypatch.setattr(settings, "waiaconnect_webhook_secret", SEGREDO)
+    monkeypatch.setattr(settings, "waiaconnect_connect_token", "")
+
+    corpo = b'{"id":"evt_1"}'
+    ts = str(int(time.time()) - 3600)  # 1h de idade
+    client = TestClient(app)
+    r = client.post("/webhook/waiaconnect", content=corpo, headers=_req_headers(SEGREDO, corpo, ts))
+    assert r.status_code == 403
+
+
+def test_assinatura_com_segredo_errado_e_recusada(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.main import app
+
+    class _FakeTask:
+        def __init__(self, coro):
+            coro.close()
+
+    monkeypatch.setattr(whatsapp.asyncio, "create_task", _FakeTask)
+    monkeypatch.setattr(settings, "waiaconnect_webhook_secret", SEGREDO)
+    monkeypatch.setattr(settings, "waiaconnect_connect_token", "")
+
+    corpo = b'{"id":"evt_1"}'
+    ts = str(int(time.time()))
+    client = TestClient(app)
+    headers = _req_headers("whsec_outro", corpo, ts)
+    assert client.post("/webhook/waiaconnect", content=corpo, headers=headers).status_code == 403
+
+
+def test_assinatura_ignorada_quando_secret_nao_configurado(monkeypatch):
+    """Sem WAIACONNECT_WEBHOOK_SECRET a assinatura não vale como credencial."""
+    monkeypatch.setattr(settings, "waiaconnect_webhook_secret", "")
+
+    class _Req:
+        headers = {
+            "x-connect-timestamp": str(int(time.time())),
+            "x-connect-signature-256": _assina(SEGREDO, b"{}", str(int(time.time()))),
+        }
+
+    assert whatsapp._verificar_assinatura_waiaconnect(_Req(), b"{}") is False
 
 
 async def _nao_processa(body):

@@ -9,10 +9,13 @@ Substitui o pipeline Evolution API. Principais diferenças:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import random
 import re
 import secrets
+import time
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -41,6 +44,9 @@ _timers: dict[str, asyncio.Task] = {}
 # Configure no painel da WaiaConnect/Meta e coloque o nome exato aqui
 TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
 
+# Tolerância de replay da assinatura do webhook (spec WaiaConnect: 5 min)
+ASSINATURA_TOLERANCIA_S = 300
+
 
 # ---------------------------------------------------------------------------
 # Webhook WaiaConnect
@@ -61,41 +67,39 @@ def _verificar_token_estatico(request: Request) -> bool:
 
 
 def _verificar_assinatura_waiaconnect(request: Request, body: bytes) -> bool:
-    """Verifica assinatura HMAC da WaiaConnect.
-    
-    WaiaConnect pode enviar a assinatura em headers como:
-    - X-Hub-Signature-256 (padrão Meta)
-    - X-Waia-Signature
-    - X-Signature
-    
-    O secret é derivado do webhook_token (igual ao Evolution).
+    """Valida X-Connect-Signature-256 conforme a spec da WaiaConnect.
+
+    O header é `sha256=HMAC_SHA256(secret, "<X-Connect-Timestamp>.<raw body>")`.
+    O timestamp está dentro do HMAC, então uma entrega capturada não pode ser
+    replayada; entregas com mais de 5 min são recusadas.
+
+    O HMAC é calculado sobre os bytes crus — reserializar o JSON muda o hash.
     """
-    import hmac
-    import hashlib
-    
-    secret = settings.webhook_token.encode()
-    
-    # Tenta vários headers possíveis
-    signature_header = (
-        request.headers.get("x-hub-signature-256")
-        or request.headers.get("x-waiaconnect-signature")
-        or request.headers.get("x-signature")
-        or request.headers.get("x-hub-signature")
-    )
-    
-    if not signature_header:
+    secret = settings.waiaconnect_webhook_secret
+    if not secret:
         return False
-    
-    # Formato esperado: "sha256=<hash>" ou apenas "<hash>"
-    if "=" in signature_header:
-        algo, expected_sig = signature_header.split("=", 1)
-    else:
-        expected_sig = signature_header
-    
-    # Calcula HMAC-SHA256 do body
-    computed_sig = hmac.new(secret, body, hashlib.sha256).hexdigest()
-    
-    return hmac.compare_digest(computed_sig, expected_sig)
+
+    timestamp = request.headers.get("x-connect-timestamp", "")
+    assinatura = request.headers.get("x-connect-signature-256", "")
+    if not timestamp or not assinatura:
+        return False
+
+    try:
+        idade = abs(time.time() - int(timestamp))
+    except ValueError:
+        log.warning("X-Connect-Timestamp inválido: %r", timestamp)
+        return False
+
+    if idade > ASSINATURA_TOLERANCIA_S:
+        log.warning(
+            "Entrega WaiaConnect recusada: %ds de idade (tolerância %ds)",
+            int(idade),
+            ASSINATURA_TOLERANCIA_S,
+        )
+        return False
+
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256)
+    return secrets.compare_digest(f"sha256={mac.hexdigest()}", assinatura)
 
 
 @router.post("/webhook/waiaconnect")

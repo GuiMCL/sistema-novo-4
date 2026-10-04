@@ -15,6 +15,8 @@ services:
       WAIACONNECT_BASE_URL: ${WAIACONNECT_BASE_URL:-https://api.waiaconnect.com}
       WAIACONNECT_CONNECTION_ID: ${WAIACONNECT_CONNECTION_ID:?Defina WAIACONNECT_CONNECTION_ID no .env}
       WAIACONNECT_CONNECT_TOKEN: ${WAIACONNECT_CONNECT_TOKEN:?Defina WAIACONNECT_CONNECT_TOKEN no .env}
+      # whsec_... do endpoint. Vazio = valida só o token estático.
+      WAIACONNECT_WEBHOOK_SECRET: ${WAIACONNECT_WEBHOOK_SECRET:-}
     volumes:
       - mcp_data:/data
 
