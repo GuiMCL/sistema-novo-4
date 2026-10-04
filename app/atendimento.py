@@ -66,6 +66,11 @@ def api_conversas(
 
     for conv in db.listar_conversas():
         norm = normalizar(conv.telefone) or conv.telefone
+        # O mesmo contato pode ter mais de uma linha em Conversa (chave
+        # divergida pelo sufixo de dispositivo do JID). `reconciliar_conversas`
+        # funde no boot, mas a lista não pode duplicar o contato na sidebar.
+        if norm in vistos:
+            continue
         vistos.add(norm)
         cli = clientes.get(norm)
         ags = db.agendamentos_do_telefone(norm)

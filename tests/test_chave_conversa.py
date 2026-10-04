@@ -104,8 +104,15 @@ def test_linhas_antigas_divergentes_sao_fundidas():
 
 
 def test_reconciliacao_e_idempotente():
-    db.set_conversa(JID_DISPOSITIVO, "[]")
-    db.set_conversa(JID_LIMPO, "[]")
+    from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, TextPart
+
+    def _um(texto):
+        return ModelMessagesTypeAdapter.dump_json(
+            [ModelResponse(parts=[TextPart(content=texto)])]
+        ).decode()
+
+    db.set_conversa(JID_DISPOSITIVO, _um("do webhook"))
+    db.set_conversa(JID_LIMPO, _um("do painel"))
     assert agente.reconciliar_conversas() == 1
     assert agente.reconciliar_conversas() == 0
     assert len(db.listar_conversas()) == 1
@@ -114,19 +121,25 @@ def test_reconciliacao_e_idempotente():
 def test_reconciliacao_ignora_contatos_diferentes():
     from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, TextPart
 
-    for jid in (f"554588880001@s.whatsapp.net", f"554588880001:3@s.whatsapp.net"):
-        db.set_conversa(
-            jid,
-            ModelMessagesTypeAdapter.dump_json(
-                [ModelResponse(parts=[TextPart(content="oi")])]
-            ).decode(),
-        )
-    assert db.resolver_chave_conversa("554588880001:3@s.whatsapp.net").endswith("@s.whatsapp.net")
-    # telefones distintos => grupos distintos => nada é fundido
-    db.set_conversa(JID_DISPOSITIVO, "[]")
-    assert agente.reconciliar_conversas() >= 0
-    chaves = {c.telefone for c in db.listar_conversas()}
-    assert f"554588880001:3@s.whatsapp.net" in chaves
+    def _um(texto):
+        return ModelMessagesTypeAdapter.dump_json(
+            [ModelResponse(parts=[TextPart(content=texto)])]
+        ).decode()
+
+    A, B = "554588880001", "554577770001"
+    # mesmo contato em duas formas (deve fundir) + outro contato (deve ficar)
+    db.set_conversa(f"{A}:3@s.whatsapp.net", _um("a do webhook"))
+    db.set_conversa(f"{A}@s.whatsapp.net", _um("a do painel"))
+    db.set_conversa(f"{B}:7@s.whatsapp.net", _um("b do webhook"))
+
+    assert agente.reconciliar_conversas() == 1
+
+    # A e B continuam separados: o contato B não pode ser absorvido por A
+    bolhas_b = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(B)))
+    assert [b["texto"] for b in bolhas_b] == ["b do webhook"]
+    # as duas pontas de A sobreviveram na linha fundida
+    bolhas_a = agente.historico_para_bolhas(db.get_conversa(db.resolver_chave_conversa(A)))
+    assert [b["texto"] for b in bolhas_a] == ["a do webhook", "a do painel"]
 
 
 def test_lista_de_conversas_nao_duplica_o_contato(painel):
@@ -135,5 +148,5 @@ def test_lista_de_conversas_nao_duplica_o_contato(painel):
         db.set_conversa(jid, "[]")
     r = painel.get("/atendimento/api/conversas")
     assert r.status_code == 200
-    numeros = [c.get("telefone") for c in r.json()]
-    assert len(numeros) == len(set(numeros))
+    numeros = [c.get("telefone") for c in r.json()["conversas"]]
+    assert len(numeros) == len(set(numeros)), numeros
