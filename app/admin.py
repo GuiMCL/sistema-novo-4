@@ -8,6 +8,7 @@ Autenticação:
 
 from __future__ import annotations
 
+import calendar
 import re
 import secrets
 from datetime import date, datetime, time, timedelta
@@ -140,6 +141,37 @@ def pagina_dashboard(request: Request, _: str = Depends(autenticar_pagina)):
     )
 
 
+_MESES_PT = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+_DIAS_SEMANA_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+
+def _calendario_mes(agendamentos: list[db.Agendamento], ano: int, mes: int) -> list[list[dict]]:
+    """Grade do mês (segunda a domingo) com os agendamentos agrupados por dia."""
+    por_dia: dict[date, list[db.Agendamento]] = {}
+    for a in agendamentos:
+        try:
+            d = date.fromisoformat(a.inicio.split("T")[0])
+        except (ValueError, AttributeError):
+            continue
+        por_dia.setdefault(d, []).append(a)
+    hoje = date.today()
+    grade = calendar.Calendar(firstweekday=0).monthdatescalendar(ano, mes)
+    semanas: list[list[dict]] = []
+    for semana in grade:
+        linha = []
+        for d in semana:
+            linha.append({
+                "dia": d.day,
+                "fora": d.month != mes,
+                "hoje": d == hoje,
+                "data": d.isoformat(),
+                "agendamentos": sorted(por_dia.get(d, []), key=lambda a: a.inicio),
+            })
+        semanas.append(linha)
+    return semanas
+
+
 @router.get("/admin/agenda", response_class=HTMLResponse)
 def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autenticar_pagina)):
     servicos = db.listar_todos_servicos()
@@ -170,6 +202,37 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
                  or any(db.get_conversa(a.telefone_cliente) for _ in [1]))
         ]
 
+    # Navegacao do calendario (mes/ano via query string)
+    hoje = date.today()
+    try:
+        mes = int(request.query_params.get("mes", hoje.month))
+        ano = int(request.query_params.get("ano", hoje.year))
+    except (TypeError, ValueError):
+        mes, ano = hoje.month, hoje.year
+    if not (1 <= mes <= 12):
+        mes, ano = hoje.month, hoje.year
+    base_url = "/admin/agenda" + ("?ativos=1&" if ativos else "?")
+    mes_prox = date(ano, mes, 1).replace(day=28) + timedelta(days=4)
+    mes_ant = date(ano, mes, 1) - timedelta(days=1)
+
+    vaga_por_id = {v.id: v.nome for v in vagas}
+    ag_detalhe: dict[int, dict] = {}
+    for a in agendamentos:
+        srv = db.nome_servico(a)
+        ag_detalhe[a.id] = {
+            "id": a.id,
+            "nome": a.nome_cliente,
+            "telefone": a.telefone_cliente,
+            "servico": srv,
+            "descricao": a.descricao,
+            "veiculo": a.veiculo,
+            "placa": a.placa,
+            "vaga": vaga_por_id.get(a.vaga_id) if a.vaga_id else "",
+            "inicio": a.inicio,
+            "fim": a.fim,
+            "obs": a.observacoes,
+        }
+
     return templates.TemplateResponse(
         request, "admin_agenda.html",
         {
@@ -181,10 +244,18 @@ def pagina_agenda(request: Request, ativos: str = "", _: str = Depends(autentica
             "n_ativos": sum(1 for s in servicos if s.ativo),
             "horarios_por_dia": horarios_por_dia,
             "n_horarios": len(horarios),
-            "evolution_url": settings.evolution_external_url,
             "vagas": vagas,
             "lembrete": lembrete,
-            "apenas_ativos": True,
+            "apenas_ativos": bool(ativos),
+            "cal": _calendario_mes(agendamentos, ano, mes),
+            "mes_nome": _MESES_PT[mes],
+            "ano_exib": ano,
+            "hoje_iso": hoje.isoformat(),
+            "mes_ant_url": f"{base_url}mes={mes_ant.month}&ano={mes_ant.year}",
+            "mes_prox_url": f"{base_url}mes={mes_prox.month}&ano={mes_prox.year}",
+            "hoje_url": base_url.rstrip("?&"),
+            "dias_semana": _DIAS_SEMANA_PT,
+            "ag_detalhe": ag_detalhe,
             **_contexto_base(),
         },
     )
@@ -701,44 +772,54 @@ def _resolver_servico(servico: str, servico_id: int | None) -> tuple[int | None,
 def novo_agendamento(
     request: Request,
     _: db.Usuario = Depends(auth.admin_required),
-    servico: str = Form(""),
     servico_id: int | None = Form(None),
+    servico_nome: str = Form(""),
+    descricao: str = Form(""),
     nome_cliente: str = Form(...),
     telefone_cliente: str = Form(...),
-    inicio: str = Form(...),
+    data: str = Form(...),
     observacoes: str = Form(""),
     veiculo: str = Form(""),
     placa: str = Form(""),
     modelo: str = Form(""),
     ano: str = Form(""),
 ):
-    servico_id, servico_nome, duracao_min = _resolver_servico(servico, servico_id)
+    """Agendamento manual. O atendimento é por DIA INTEIRO: o backend monta
+    início/fim a partir do expediente do dia e auto-atribui a vaga (box)."""
+    servico = db.get_servico(servico_id) if servico_id else None
     nome = nome_cliente.strip()
     if not nome:
         raise HTTPException(status_code=400, detail="Informe o nome do cliente.")
     tel = telefone_cliente.strip()
     if not tel:
         raise HTTPException(status_code=400, detail="Informe o telefone do cliente.")
+    if not servico and not descricao.strip():
+        raise HTTPException(status_code=400, detail="Informe o sintoma/descrição ou selecione um serviço.")
     try:
-        dt_inicio = datetime.fromisoformat(inicio)
+        dia = date.fromisoformat(data)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Horário inválido.")
-    fim = (dt_inicio + timedelta(minutes=duracao_min)).isoformat(timespec="minutes")
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
     ag = db.criar_agendamento(
-        servico_id=servico_id,
+        servico_id=servico.id if servico else None,
         servico_nome=servico_nome,
         telefone_cliente=normalizar(tel) or tel,
         nome_cliente=nome,
         inicio=dt_inicio.isoformat(timespec="minutes"),
-        fim=fim,
+        fim=dt_fim.isoformat(timespec="minutes"),
         observacoes=observacoes.strip(),
         veiculo=veiculo.strip(),
         placa=placa.strip().upper(),
         modelo=modelo.strip(),
         ano=ano.strip(),
+        descricao=descricao.strip(),
     )
     if not ag:
-        raise HTTPException(status_code=409, detail="Sem vagas disponíveis no horário.")
+        raise HTTPException(status_code=409, detail="Sem vagas disponíveis nesta data.")
     return RedirectResponse("/admin", status_code=303)
 
 
