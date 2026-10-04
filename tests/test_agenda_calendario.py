@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import admin as admin_mod, auth, db
+from app import main
 from app.main import app
 
 # Segunda-feira futuro: quase toda segunda tem expediente no setup padrão.
@@ -291,7 +292,7 @@ def test_todo_import_de_admin_js_existe_em_disco():
     import pathlib
     import re
 
-    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+    raiz = pathlib.Path(main.__file__).parent / "static" / "admin" / "js"
     fonte = (raiz / "admin.js").read_text(encoding="utf-8")
     faltando = [
         m for m in re.findall(r"import\s+'\./([^']+)'", fonte)
@@ -304,7 +305,7 @@ def test_calendario_e_agendamento_entram_no_admin_js():
     """O calendário e o agendamento manual são carregados por admin.js."""
     import pathlib
 
-    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+    raiz = pathlib.Path(main.__file__).parent / "static" / "admin" / "js"
     fonte = (raiz / "admin.js").read_text(encoding="utf-8")
     assert "import './calendario.js';" in fonte
     assert "import './agendamento.js';" in fonte
@@ -318,7 +319,7 @@ def test_ids_usados_pelo_js_existem_no_html_da_agenda(painel):
 
     h = painel.get("/admin/agenda").text
     ids_html = set(re.findall(r'id="([^"]+)"', h))
-    raiz = pathlib.Path(app.__file__).parent / "static" / "admin" / "js"
+    raiz = pathlib.Path(main.__file__).parent / "static" / "admin" / "js"
 
     for nome in ("agendamento.js", "calendario.js"):
         fonte = (raiz / nome).read_text(encoding="utf-8")

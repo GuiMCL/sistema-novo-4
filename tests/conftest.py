@@ -20,6 +20,9 @@ from sqlmodel import select
 
 from app import auth, db
 
+# Populado na primeira execução de `banco_limpo` e restaurado após cada teste.
+_HORARIOS_INICIAIS = None
+
 TEL_CLIENTE = "5545999990001"
 JID_CLIENTE = f"{TEL_CLIENTE}@s.whatsapp.net"
 
@@ -81,3 +84,17 @@ def criar_servico(nome="Troca do condensador", duracao=60):
 
 def criar_vaga(nome="Box 1"):
     return db.criar_vaga(nome=nome)
+
+@pytest.fixture
+def painel():
+    """Cliente do /atendimento com o admin autenticado."""
+    from fastapi.testclient import TestClient
+
+    from app import atendimento as at_mod
+    from app.main import app as fastapi_app
+
+    fastapi_app.dependency_overrides[at_mod.auth.login_required] = lambda: db.Usuario(
+        nome="Atendente", email="a@a", papel="admin"
+    )
+    yield TestClient(fastapi_app, raise_server_exceptions=False)
+    fastapi_app.dependency_overrides.clear()

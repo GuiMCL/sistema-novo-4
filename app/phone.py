@@ -24,6 +24,12 @@ def normalizar(telefone: str | None) -> str:
 
     # Remove sufixo da Evolution (5545...@s.whatsapp.net) e símbolos.
     bruto = telefone.split("@")[0]
+    # JID do WhatsApp carrega o id do dispositivo: "5545999900001:12@s.whatsapp.net".
+    # Sem tirar esse ":12" ele virava dígito e o número normalizava para
+    # 554599990000112 — número diferente do mesmo contato. Aí o webhook gravava
+    # o histórico da IA/cliente numa linha e o painel (/atendimento) lia outra,
+    # e só as mensagens do atendente apareciam.
+    bruto = bruto.split(":")[0]
     digitos = re.sub(r"\D", "", bruto)
     if not digitos:
         return ""

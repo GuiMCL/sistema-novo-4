@@ -21,10 +21,8 @@ import asyncio
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 
-from app import agente, atendimento as at_mod, auth, db, whatsapp
-from app.main import app
+from app import agente, auth, db, whatsapp
 
 TEL = "5545999900001"
 
@@ -33,15 +31,6 @@ def _http_erro(mensagem="template não aprovado"):
     req = httpx.Request("POST", "https://api.waiaconnect.com/v1/messages")
     resp = httpx.Response(400, request=req, json={"error": mensagem})
     return httpx.HTTPStatusError(mensagem, request=req, response=resp)
-
-
-@pytest.fixture
-def painel():
-    app.dependency_overrides[at_mod.auth.login_required] = lambda: db.Usuario(
-        nome="Atendente", email="a@a", papel="admin"
-    )
-    yield TestClient(app, raise_server_exceptions=False)
-    app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------

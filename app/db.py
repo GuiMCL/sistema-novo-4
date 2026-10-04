@@ -306,6 +306,16 @@ def init_db() -> None:
                 papel="admin",
                 telefone=settings.owner_phone,
             )
+    # Funde conversas que nasceram duplicadas pelo sufixo de dispositivo do JID
+    # (ver phone.normalizar). Import tardio: agente importa db.
+    try:
+        from .agente import reconciliar_conversas
+
+        reconciliar_conversas()
+    except Exception as e:
+        import logging
+
+        logging.getLogger("app").warning("Falha ao reconciliar conversas: %s", e)
 
 
 def _migrar() -> None:
@@ -768,6 +778,14 @@ def set_conversa(telefone: str, historico: str) -> None:
         s.commit()
 
 
+def apagar_conversa(telefone: str) -> None:
+    with _lock, _session() as s:
+        c = s.get(Conversa, telefone)
+        if c:
+            s.delete(c)
+            s.commit()
+
+
 def listar_conversas() -> list[Conversa]:
     """Todas as conversas com memória (fonte da lista de conversas do painel)."""
     with _session() as s:
@@ -784,7 +802,13 @@ def resolver_chave_conversa(telefone: str) -> str:
     for chave in chaves_conversas():
         if mesmo_numero(chave, telefone):
             return chave
-    return f"{re.sub(r'[^0-9]', '', telefone or '')}@s.whatsapp.net"
+    # Só os dígitos, sem o domínio e SEM o id de dispositivo: um JID
+    # `…:12@s.whatsapp.net` viraria `…112@s.whatsapp.net`, outra chave para o
+    # mesmo contato — e o histórico do webhook e o do painel não se encontrariam.
+    from .phone import normalizar
+
+    digitos = (normalizar(telefone) or re.sub(r"\D", "", telefone or "")).lstrip("+")
+    return f"{digitos}@s.whatsapp.net"
 
 
 # ---------------------------------------------------------------------------

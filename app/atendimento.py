@@ -29,8 +29,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/atendimento", response_class=HTMLResponse)
-def pagina_atendimento(request: Request, _: db.Usuario = Depends(auth.login_required)):
-    usuario = auth.login_required(request)
+def pagina_atendimento(request: Request, usuario: db.Usuario = Depends(auth.login_required)):
     return templates.TemplateResponse(
         request,
         "atendimento.html",
@@ -53,12 +52,11 @@ def pagina_atendimento(request: Request, _: db.Usuario = Depends(auth.login_requ
 @router.get("/atendimento/api/conversas")
 def api_conversas(
     request: Request,
-    _: db.Usuario = Depends(auth.login_required),
+    usuario: db.Usuario = Depends(auth.login_required),
     busca: str = "",
     filtro: str = "",  # "minhas" | "pendentes" | "todas"
 ):
     """Lista de conversas para a sidebar."""
-    usuario = auth.login_required(request)
 
     clientes = {c.telefone: c for c in db.listar_clientes()}
     itens: list[dict] = []
@@ -213,7 +211,7 @@ def api_conversa_pausa(
 @router.post("/atendimento/api/agendamento")
 def api_criar_agendamento(
     request: Request,
-    _: db.Usuario = Depends(auth.login_required),
+    usuario: db.Usuario = Depends(auth.login_required),
     servico: str = Form(""),
     servico_id: int | None = Form(None),
     telefone_cliente: str = Form(...),
@@ -226,7 +224,6 @@ def api_criar_agendamento(
     from .phone import normalizar
     from datetime import timedelta
 
-    usuario = auth.login_required(request)
     if servico_id:
         srv = db.get_servico(servico_id)
         if not srv:

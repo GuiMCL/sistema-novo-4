@@ -13,6 +13,10 @@ tabela Conversa, janela de 50 mensagens (paridade com o Redis Chat Memory).
 
 from __future__ import annotations
 
+import logging
+
+log = logging.getLogger("agente")
+
 import contextvars
 import re
 from datetime import datetime, timedelta
@@ -465,6 +469,54 @@ async def executar_tarefa(telefone: str, instrucao: str) -> str:
 # Escrita direta na memória (sem rodar o agente) — usada quando o bot está
 # pausado (mensagem do cliente) e no envio manual pelo painel (fala do bot).
 # ---------------------------------------------------------------------------
+
+
+def reconciliar_conversas() -> int:
+    """Funde linhas de `Conversa` do mesmo contato que divergiram de chave.
+
+    Bug real: o JID do WhatsApp traz o id do dispositivo
+    (`5545…:12@s.whatsapp.net`). Como o sufixo virava dígito, `normalizar`
+    produzia um número diferente do mesmo contato e cada remetente criava a
+    própria linha. O webhook gravava cliente+IA numa, o painel gravava o
+    atendente em outra — e no /atendimento só aparecia a mensagem do atendente.
+
+    Com `phone.normalizar` corrigido as linhas novas já nascem certainas, mas os
+    bancos que sofreram com o bug continuam divididos: aqui as duas pontas são
+    reunidas na chave canônica, preservando a ordem cronológica.
+
+    Devolve quantas linhas foram fundidas. Idempotente.
+    """
+    grupos: dict[str, list] = {}
+    for c in db.listar_conversas():
+        grupos.setdefault(db.resolver_chave_conversa(c.telefone), []).append(c)
+
+    fundidas = 0
+    for canonica, linhas in grupos.items():
+        if len(linhas) < 2:
+            continue
+        # mais antiga -> mais recente, para a ordem de turno do agente importar
+        linhas.sort(key=lambda c: (c.atualizado_em or "", c.telefone))
+        mensagens: list = []
+        perderam: list[str] = []
+        for c in linhas:
+            try:
+                mensagens.extend(ModelMessagesTypeAdapter.validate_json(c.historico or "[]"))
+            except Exception:
+                perderam.append(c.telefone)
+        if not mensagens:
+            continue
+        db.set_conversa(canonica, ModelMessagesTypeAdapter.dump_json(mensagens).decode())
+        # `set_conversa` pode ter criado a canônica; remove só as duplicatas
+        for c in linhas:
+            if c.telefone != canonica and c.telefone not in perderam:
+                db.apagar_conversa(c.telefone)
+        fundidas += len(linhas) - 1
+        log.warning(
+            "Conversas do contato %s divergiam em %d linhas (sufixo de dispositivo "
+            "do JID); funde em %d mensagens. Ilegíveis: %s",
+            canonica, len(linhas), len(mensagens), perderam or "nenhuma",
+        )
+    return fundidas
 
 
 def registrar_na_memoria(telefone: str, texto: str, papel: str) -> None:
