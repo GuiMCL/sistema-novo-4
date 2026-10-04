@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import auth, db, notificacoes
+from . import auth, db, notificacoes, waiaconnect
 from .phone import mesmo_numero, normalizar
 
 mcp = FastMCP(
@@ -606,7 +606,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     if not d:
         return {"erro": f"Destino '{destino}' nao encontrado. Destinos disponiveis: consulte listar_destinos_transferencia."}
     from .agente import registrar_na_memoria
-    from .evolution import enviar_texto_sync as enviar_sync
+    from .waiaconnect import enviar_texto_sync as enviar_sync
     from .phone import formatar_internacional
 
     # Informacoes do cliente
@@ -630,7 +630,7 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
         inst = db.get_instancia(d.instancia_id)
         if inst and inst.numero:
             try:
-                enviar_sync(inst.numero, notificacao, instancia=inst.nome)
+                enviar_sync(inst.numero, notificacao)
             except Exception:
                 pass
     elif d.telefone:

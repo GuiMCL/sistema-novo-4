@@ -7,6 +7,7 @@ tabelas e desliga o aviso ao dono (sem chamada de rede nos testes).
 
 import os
 import tempfile
+from datetime import date, timedelta
 
 _tmp = tempfile.mkdtemp(prefix="mcp_test_")
 os.environ["MCP_DB_PATH"] = os.path.join(_tmp, "test.db")
@@ -21,6 +22,15 @@ from app import auth, db
 
 TEL_CLIENTE = "5545999990001"
 JID_CLIENTE = f"{TEL_CLIENTE}@s.whatsapp.net"
+
+# Data futura para testes (amanhã)
+DATA_TESTE_FUTURA = (date.today() + timedelta(days=1)).isoformat()
+
+
+@pytest.fixture
+def data_futura():
+    """Data de amanhã para testes que precisam de data válida."""
+    return DATA_TESTE_FUTURA
 
 
 @pytest.fixture(autouse=True)

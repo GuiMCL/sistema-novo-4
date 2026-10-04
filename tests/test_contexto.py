@@ -18,14 +18,14 @@ def test_contexto_sem_agendamento():
     assert "Nome cadastrado" in bloco
 
 
-def test_contexto_traz_agendamento_existente():
+def test_contexto_traz_agendamento_existente(data_futura):
     servico = criar_servico("Troca do condensador do ar-condicionado")
     token_auth = _solicitante_cliente()
     try:
         r = tools.agendar(
             servico_id=servico.id,
             nome_cliente="Adrieli",
-            data="2026-08-18",
+            data=data_futura,
             veiculo="Volkswagen Gol",
             placa="ALX5946",
         )
@@ -41,7 +41,7 @@ def test_contexto_traz_agendamento_existente():
 
     assert "Adrieli" in bloco
     assert "Troca do condensador" in bloco
-    assert "2026-08-18" in bloco
+    assert data_futura in bloco
     assert "Volkswagen Gol" in bloco
     assert "ALX5946" in bloco
     assert "Status: ativo" in bloco

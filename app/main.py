@@ -1,6 +1,6 @@
 """Aplicação principal — agente WhatsApp + painel /admin + atendimento Chatwoot-like + servidor MCP.
 
-  /webhook/whatsapp/receberMensagem — pipeline do agente
+  /webhook/waiaconnect — pipeline do agente (WaiaConnect)
   /admin — painel de configuração
   /atendimento — interface de atendimento tipo Chatwoot
   /mcp — endpoint MCP (streamable-http)
@@ -19,7 +19,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, evolution, tarefas
+from . import auth, tarefas
 from .admin import router as admin_router
 from .atendimento import router as atendimento_router
 from .config import settings
@@ -60,17 +60,11 @@ class SolicitanteMiddleware:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Garante todas as instâncias registradas no banco na Evolution
-    bootstrap = asyncio.create_task(
-        evolution.garantir_multi_instancias(
-            f"{settings.webhook_url}?token={settings.webhook_token}"
-        )
-    )
-    worker = asyncio.create_task(tarefas.worker())  # ações proativas + lembretes
+    # Worker de ações proativas + lembretes
+    worker = asyncio.create_task(tarefas.worker())
     async with mcp.session_manager.run():
         yield
     worker.cancel()
-    bootstrap.cancel()
 
 
 app = FastAPI(title="Revi Atende — Sistema de Agendamentos", lifespan=lifespan)

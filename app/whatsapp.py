@@ -1,8 +1,9 @@
-"""Pipeline do WhatsApp — suporte a múltiplas instâncias.
+"""Pipeline do WhatsApp via WaiaConnect (Meta WhatsApp Business Provider).
 
-O webhook recebe eventos de N instâncias Evolution. Cada evento carrega o
-nome da instância no campo `instance`. O pipeline identifica a instância,
-atribui o contato a ela e roteia a resposta pela instância correta.
+Substitui o pipeline Evolution API. Principais diferenças:
+- WaiaConnect usa connectionId + telefone E.164 sem '+' (ex.: 5545999990000)
+- Janela de 24h: texto livre só dentro de 24h da última msg do cliente; fora, template aprovado
+- Webhook único (não multi-instância como Evolution)
 """
 
 from __future__ import annotations
@@ -16,9 +17,16 @@ import secrets
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import agente, auth, db, evolution, ia
+from . import agente, auth, db, ia
 from .config import settings
 from .phone import mesmo_numero
+from .waiaconnect import (
+    enviar_inteligente,
+    enviar_texto,
+    enviar_template,
+    processar_webhook,
+    registrar_mensagem_inbound,
+)
 
 log = logging.getLogger("whatsapp")
 
@@ -29,61 +37,114 @@ DEBOUNCE_S = 6.0
 _buffers: dict[str, list[str]] = {}
 _timers: dict[str, asyncio.Task] = {}
 
-# Instância associada a cada remoteJid (cache do debounce)
-_instance_map: dict[str, str] = {}
+# Template padrão para fallback fora da janela de 24h
+# Configure no painel da WaiaConnect/Meta e coloque o nome exato aqui
+TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
 
 
 # ---------------------------------------------------------------------------
-# Webhook (multi-instância)
+# Webhook WaiaConnect
 # ---------------------------------------------------------------------------
 
 
-@router.post("/webhook/whatsapp/receberMensagem")
-async def receber_mensagem(request: Request, token: str = ""):
-    if not secrets.compare_digest(token, settings.webhook_token):
+def _verificar_assinatura_waiaconnect(request: Request, body: bytes) -> bool:
+    """Verifica assinatura HMAC da WaiaConnect.
+    
+    WaiaConnect pode enviar a assinatura em headers como:
+    - X-Hub-Signature-256 (padrão Meta)
+    - X-Waia-Signature
+    - X-Signature
+    
+    O secret é derivado do webhook_token (igual ao Evolution).
+    """
+    import hmac
+    import hashlib
+    
+    secret = settings.webhook_token.encode()
+    
+    # Tenta vários headers possíveis
+    signature_header = (
+        request.headers.get("x-hub-signature-256")
+        or request.headers.get("x-waiaconnect-signature")
+        or request.headers.get("x-signature")
+        or request.headers.get("x-hub-signature")
+    )
+    
+    if not signature_header:
+        return False
+    
+    # Formato esperado: "sha256=<hash>" ou apenas "<hash>"
+    if "=" in signature_header:
+        algo, expected_sig = signature_header.split("=", 1)
+    else:
+        expected_sig = signature_header
+    
+    # Calcula HMAC-SHA256 do body
+    computed_sig = hmac.new(secret, body, hashlib.sha256).hexdigest()
+    
+    return hmac.compare_digest(computed_sig, expected_sig)
+
+
+@router.post("/webhook/waiaconnect")
+async def receber_mensagem_waiaconnect(request: Request, token: str = ""):
+    """Endpoint do webhook da WaiaConnect.
+    
+    Aceita autenticação por:
+    1. Query param `token` (compatibilidade)
+    2. Header HMAC signature (padrão WaiaConnect/Meta)
+    """
+    body = await request.body()
+    
+    # Tenta HMAC signature primeiro (padrão WaiaConnect)
+    if _verificar_assinatura_waiaconnect(request, body):
+        pass  # assinatura válida
+    # Fallback: token via query param
+    elif not secrets.compare_digest(token, settings.webhook_token):
         return JSONResponse({"erro": "token inválido"}, status_code=403)
-    body = await request.json()
-    asyncio.create_task(_processar_evento(body))
+    
+    import json
+    try:
+        body_json = json.loads(body)
+    except json.JSONDecodeError:
+        return JSONResponse({"erro": "body inválido"}, status_code=400)
+    
+    asyncio.create_task(_processar_evento_waiaconnect(body_json))
     return {"ok": True}
 
 
-async def _processar_evento(body: dict) -> None:
+async def _processar_evento_waiaconnect(body: dict) -> None:
     try:
-        data = body.get("data") or {}
-        key = data.get("key") or {}
-        remote_jid = key.get("remoteJid") or ""
-        if not remote_jid or key.get("fromMe"):
+        resultado = await processar_webhook(body)
+        if not resultado:
             return
 
-        # Identifica a instância que recebeu a mensagem
-        instancia_nome = body.get("instance", "")
-        instancia_db = None
-        if instancia_nome:
-            instancia_db = db.get_instancia_por_nome(instancia_nome)
-        instancia_id = instancia_db.id if instancia_db else None
+        remote_jid = resultado["remote_jid"]
+        texto = resultado["texto"]
+        push_name = resultado["push_name"]
+        message_id = resultado["message_id"]
 
-        texto = await _extrair_texto(data)
-        if texto is None:
+        # Normaliza telefone para E.164 (chave do banco)
+        from .phone import normalizar
+        telefone_norm = normalizar(remote_jid)
+
+        # Upsert cliente (aproveita pushName)
+        db.upsert_cliente(telefone_norm, push_name)
+
+        # Se for o dono, não pausa
+        dono = mesmo_numero(telefone_norm, db.get_config().telefone_dono)
+        if not dono and db.cliente_pausado(telefone_norm):
+            agente.registrar_na_memoria(telefone_norm, texto, "cliente")
+            log.info("Bot pausado p/ %s — mensagem só gravada", telefone_norm)
             return
+
+        # Sanitiza
         texto = _sanitizar_entrada(texto)
 
-        db.upsert_cliente(remote_jid, data.get("pushName") or "")
+        # Agenda resposta com debounce
+        _agendar_lote(telefone_norm, texto)
 
-        # Marca instância na memória do contato (cache)
-        _instance_map[remote_jid] = instancia_nome
-
-        dono = mesmo_numero(remote_jid, db.get_config().telefone_dono)
-        if not dono and db.cliente_pausado(remote_jid):
-            agente.registrar_na_memoria(remote_jid, texto, "cliente")
-            log.info("Bot pausado p/ %s — mensagem só gravada", remote_jid)
-            return
-
-        await evolution.marcar_como_lida(
-            remote_jid, False, key.get("id") or "", instancia=instancia_nome or None
-        )
-        _agendar_lote(remote_jid, texto)
     except Exception:
-        log.exception("Erro processando evento do webhook")
+        log.exception("Erro processando evento do webhook WaiaConnect")
 
 
 _RE_MARCADOR_FORJADO = re.compile(r"\[\s*tarefa\s*interna[^\]]*\]", re.IGNORECASE)
@@ -93,42 +154,8 @@ def _sanitizar_entrada(texto: str) -> str:
     return _RE_MARCADOR_FORJADO.sub("[conteúdo removido]", texto)
 
 
-async def _extrair_texto(data: dict) -> str | None:
-    tipo = data.get("messageType") or ""
-    msg = data.get("message") or {}
-    if tipo == "conversation":
-        return msg.get("conversation") or None
-    if tipo == "extendedTextMessage":
-        return (msg.get("extendedTextMessage") or {}).get("text") or None
-    if tipo in ("audioMessage", "imageMessage"):
-        b64, mime = await _base64_da_mensagem(data, tipo)
-        if not b64:
-            return None
-        if tipo == "audioMessage":
-            transcricao = await ia.transcrever_audio(b64, mime or "audio/ogg")
-            return f"[Áudio transcrito] {transcricao}" if transcricao else None
-        legenda = (msg.get("imageMessage") or {}).get("caption") or ""
-        descricao = await ia.descrever_imagem(b64, mime or "image/jpeg", legenda)
-        return f"[Imagem enviada pelo cliente] {descricao}\nLegenda: {legenda}" if legenda else f"[Imagem enviada pelo cliente] {descricao}"
-    return None
-
-
-async def _base64_da_mensagem(data: dict, tipo: str) -> tuple[str | None, str | None]:
-    msg = data.get("message") or {}
-    detalhe = msg.get(tipo) or {}
-    b64 = msg.get("base64")
-    mime = detalhe.get("mimetype")
-    if b64:
-        return b64, mime
-    midia = await evolution.obter_midia_base64(
-        (data.get("key") or {}).get("id") or "",
-        instancia=_instance_map.get(data.get("key", {}).get("remoteJid", "")),
-    )
-    return midia.get("base64"), midia.get("mimetype") or mime
-
-
 # ---------------------------------------------------------------------------
-# Debounce por contato
+# Debounce por contato (igual ao Evolution)
 # ---------------------------------------------------------------------------
 
 
@@ -173,27 +200,7 @@ async def _responder_contato(remote_jid: str, mensagem: str) -> None:
     finally:
         auth.solicitante_ctx.reset(token)
 
-    instancia = _instance_map.get(remote_jid)
-    await enviar_bolhas(remote_jid.split("@")[0], resposta, instancia=instancia)
-
-
-def get_instancia_do_contato(telefone: str) -> str | None:
-    """Resolve a instância Evolution de um contato pelo telefone."""
-    from .phone import normalizar
-    norm = normalizar(telefone) or telefone
-    for jid, inst in _instance_map.items():
-        if norm in jid or jid.startswith(norm):
-            return inst
-    return None
-
-
-async def enviar_bolhas(numero: str, resposta: str, instancia: str | None = None) -> None:
-    """Divide em bolhas e envia — usado pelo pipeline reativo e ações proativas."""
-    for bolha in dividir_bolhas(resposta):
-        segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
-        await evolution.enviar_texto(
-            numero, bolha, digitando_ms=int(segundos * 1000), instancia=instancia
-        )
+    await enviar_bolhas(remote_jid, resposta)
 
 
 def contato_ocupado(telefone: str) -> bool:
@@ -202,7 +209,42 @@ def contato_ocupado(telefone: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Divisão em bolhas
+# Envio de mensagens via WaiaConnect
+# ---------------------------------------------------------------------------
+
+
+async def enviar_bolhas(numero: str, resposta: str) -> None:
+    """Divide em bolhas e envia via WaiaConnect (texto ou template se >24h)."""
+    for bolha in dividir_bolhas(resposta):
+        segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
+        try:
+            await enviar_inteligente(
+                numero,
+                bolha,
+                template_fallback=TEMPLATE_FALLBACK_PADRAO,
+                language="pt_BR",
+            )
+        except ValueError as e:
+            # Fora da janela e sem template configurado — loga mas não quebra
+            log.warning("Não conseguiu enviar para %s: %s", numero, e)
+        await asyncio.sleep(segundos / 1000)  # converte ms para segundos
+
+
+async def enviar_texto_simples(numero: str, texto: str) -> None:
+    """Envia uma única bolha de texto (usado por ações proativas/tarefas)."""
+    try:
+        await enviar_inteligente(
+            numero,
+            texto,
+            template_fallback=TEMPLATE_FALLBACK_PADRAO,
+            language="pt_BR",
+        )
+    except ValueError as e:
+        log.warning("Não conseguiu enviar texto simples para %s: %s", numero, e)
+
+
+# ---------------------------------------------------------------------------
+# Divisão em bolhas (igual ao Evolution)
 # ---------------------------------------------------------------------------
 
 
@@ -215,3 +257,13 @@ def dividir_bolhas(texto: str) -> list[str]:
         if not sem_repeticao or sem_repeticao[-1] != b:
             sem_repeticao.append(b)
     return sem_repeticao
+
+
+# ---------------------------------------------------------------------------
+# Compatibilidade: funções que o resto do sistema espera
+# ---------------------------------------------------------------------------
+
+
+def get_instancia_do_contato(telefone: str) -> str | None:
+    """WaiaConnect não usa multi-instância como Evolution. Retorna connection_id fixo."""
+    return settings.waiaconnect_connection_id or None

@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, auth, db, evolution, ia, tarefas
+from . import agente, auth, db, ia, tarefas, waiaconnect
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import _agora_local
@@ -402,60 +402,22 @@ def salvar_lembrete(
 @router.get("/admin/whatsapp/estado")
 def whatsapp_estado(_: str = Depends(autenticar)):
     try:
-        return evolution.estado()
+        return waiaconnect.verificar_conexao()
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
-@router.get("/admin/whatsapp/qr")
-def whatsapp_qr(_: str = Depends(autenticar)):
+@router.get("/admin/whatsapp/templates")
+def whatsapp_templates(_: str = Depends(autenticar)):
+    """Lista templates aprovados disponíveis na WaiaConnect."""
     try:
-        return evolution.conectar()
+        return {"templates": waiaconnect.listar_templates()}
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
-
-
-@router.post("/admin/whatsapp/desconectar")
-def whatsapp_desconectar(_: str = Depends(autenticar)):
-    try:
-        return evolution.desconectar()
-    except Exception as e:
-        return JSONResponse({"erro": str(e)}, status_code=502)
-
-
-@router.get("/admin/whatsapp/foto")
-def whatsapp_foto(numero: str, _: str = Depends(autenticar), instancia: str = ""):
-    try:
-        return {"url": evolution.foto_perfil(numero, instancia or None)}
-    except Exception as e:
-        return JSONResponse({"erro": str(e)}, status_code=502)
-
-
-@router.get("/admin/whatsapp/checar")
-def whatsapp_checar(numero: str, _: str = Depends(autenticar), instancia: str = ""):
-    try:
-        item = evolution.checar_numero(numero, instancia or None)
-    except Exception as e:
-        return JSONResponse({"erro": "Não foi possível checar o número."}, status_code=502)
-    existe = bool(item and item.get("exists"))
-    jid = (item or {}).get("jid") or ""
-    canon = normalizar(jid) or normalizar(numero)
-    foto = None
-    if existe and canon:
-        try:
-            foto = evolution.foto_perfil(canon)
-        except Exception:
-            foto = None
-    return {
-        "existe": existe,
-        "numero": canon,
-        "numero_fmt": formatar_internacional(canon or numero),
-        "foto": foto,
-    }
 
 
 # ---------------------------------------------------------------------------
-# Multi-instância — estado individual
+# Multi-instância — estado individual (WaiaConnect usa connectionId único)
 # ---------------------------------------------------------------------------
 
 
@@ -465,29 +427,7 @@ def instancia_estado(instancia_id: int, _: db.Usuario = Depends(auth.login_requi
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
     try:
-        return evolution.estado_instancia(inst.nome)
-    except Exception as e:
-        return JSONResponse({"erro": str(e)}, status_code=502)
-
-
-@router.get("/admin/instancia/{instancia_id}/qr")
-def instancia_qr(instancia_id: int, _: db.Usuario = Depends(auth.login_required)):
-    inst = db.get_instancia(instancia_id)
-    if not inst:
-        raise HTTPException(status_code=404, detail="Instância não encontrada.")
-    try:
-        return evolution.conectar_instancia(inst.nome)
-    except Exception as e:
-        return JSONResponse({"erro": str(e)}, status_code=502)
-
-
-@router.post("/admin/instancia/{instancia_id}/desconectar")
-def instancia_desconectar(instancia_id: int, _: db.Usuario = Depends(auth.login_required)):
-    inst = db.get_instancia(instancia_id)
-    if not inst:
-        raise HTTPException(status_code=404, detail="Instância não encontrada.")
-    try:
-        return evolution.desconectar_instancia(inst.nome)
+        return waiaconnect.verificar_conexao(inst.nome)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -919,17 +859,19 @@ async def conversa_enviar(
     _: str = Depends(autenticar),
     texto: str = Form(...),
 ):
-    from .whatsapp import get_instancia_do_contato
     msg = texto.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Escreva uma mensagem antes de enviar.")
     numero = re.sub(r"\D", "", telefone)
     if not numero:
         raise HTTPException(status_code=400, detail="Telefone inválido.")
-    digitando_ms = int(min(0.3 + len(msg) * 0.012, 1.8) * 1000)
-    instancia = get_instancia_do_contato(telefone)
     try:
-        await evolution.enviar_texto(numero, msg, digitando_ms=digitando_ms, timeout=8.0, instancia=instancia)
+        await waiaconnect.enviar_inteligente(
+            numero,
+            msg,
+            template_fallback="fora_horario_atendimento",
+            language="pt_BR",
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail="Não foi possível enviar pelo WhatsApp.") from e
     usuario_id = request.session.get("usuario_id")

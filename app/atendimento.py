@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from . import agente, auth, db, evolution
+from . import agente, auth, db
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -59,13 +59,6 @@ def api_conversas(
 ):
     """Lista de conversas para a sidebar."""
     usuario = auth.login_required(request)
-    from .whatsapp import get_instancia_do_contato
-
-    # Atendente: só ve conversas das suas instancias designadas
-    instancias_usuario: set[str] = set()
-    if usuario.papel != "admin":
-        for inst in db.instancias_do_usuario(usuario.id):
-            instancias_usuario.add(inst.nome)
 
     clientes = {c.telefone: c for c in db.listar_clientes()}
     itens: list[dict] = []
@@ -75,13 +68,6 @@ def api_conversas(
 
     for conv in db.listar_conversas():
         norm = normalizar(conv.telefone) or conv.telefone
-
-        # Filtro por instancia do atendente
-        if instancias_usuario:
-            inst_conv = get_instancia_do_contato(norm)
-            if inst_conv not in instancias_usuario:
-                continue
-
         vistos.add(norm)
         cli = clientes.get(norm)
         ags = db.agendamentos_do_telefone(norm)
@@ -180,7 +166,7 @@ async def api_conversa_enviar(
     texto: str = Form(...),
 ):
     """Envia mensagem manual pelo WhatsApp."""
-    from .whatsapp import enviar_bolhas, get_instancia_do_contato
+    from .whatsapp import enviar_bolhas
 
     msg = texto.strip()
     if not msg:
@@ -189,9 +175,8 @@ async def api_conversa_enviar(
     if not numero:
         raise HTTPException(status_code=400, detail="Telefone inválido.")
 
-    instancia = get_instancia_do_contato(telefone)
     try:
-        await enviar_bolhas(numero, msg, instancia=instancia)
+        await enviar_bolhas(numero, msg)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

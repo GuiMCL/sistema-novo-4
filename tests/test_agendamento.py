@@ -202,10 +202,10 @@ def test_dia_proprio_nao_lota_para_outro_cliente(seg_manha, cliente):
     assert r["dia_livre"] is False
 
 
-def test_atualizar_observacoes_anexa_sintomas(cliente):
+def test_atualizar_observacoes_anexa_sintomas(cliente, data_futura):
     servico = criar_servico()
     r = tools.agendar(
-        servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18", observacoes="inicial"
+        servico_id=servico.id, nome_cliente="Adrieli", data=data_futura, observacoes="inicial"
     )
     ag_id = r["agendamento"]["id"]
 
@@ -217,12 +217,12 @@ def test_atualizar_observacoes_anexa_sintomas(cliente):
     assert "correia dentada" in obs
 
 
-def test_atualizar_observacoes_negado_para_estranho(dono):
+def test_atualizar_observacoes_negado_para_estranho(dono, data_futura):
     servico = criar_servico()
     token = auth.solicitante_ctx.set("5545999990001@s.whatsapp.net")
     try:
         r = tools.agendar(
-            servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18"
+            servico_id=servico.id, nome_cliente="Adrieli", data=data_futura
         )
     finally:
         auth.solicitante_ctx.reset(token)

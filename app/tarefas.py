@@ -119,8 +119,7 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
             return
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
-        instancia = whatsapp.get_instancia_do_contato(alvo)
-        await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem, instancia=instancia)
+        await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem)
 
         # O lembrete entra na MESMA memória da conversa: quando o cliente
         # responder "sim/confirmo/ok", o agente vê o que foi perguntado e trata
@@ -153,8 +152,7 @@ async def _executar(t: db.Tarefa) -> None:
             return
         alvo = db.resolver_chave_conversa(t.telefone_alvo)
         resposta = await agente.executar_tarefa(alvo, instrucao)
-        instancia = whatsapp.get_instancia_do_contato(alvo)
-        await whatsapp.enviar_bolhas(alvo.split("@")[0], resposta, instancia=instancia)
+        await whatsapp.enviar_bolhas(alvo.split("@")[0], resposta)
         db.atualizar_tarefa(t.id, status="concluida", resultado=resposta[:500])
         log.info("Tarefa %d concluída (%s → %s)", t.id, t.tipo, t.telefone_alvo)
     except ia.IANaoConfigurada:

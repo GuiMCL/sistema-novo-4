@@ -17,7 +17,7 @@ import logging
 import re
 from datetime import datetime
 
-from . import db, evolution
+from . import db, waiaconnect
 from .phone import mesmo_numero, normalizar
 
 log = logging.getLogger("notificacoes")
@@ -71,6 +71,7 @@ def notificar_dono(evento: str, agendamento, solicitante: str | None) -> None:
             data=data,
             hora=hora,
         )
-        evolution.enviar_texto_sync(re.sub(r"\D", "", dono), texto)
+        import asyncio
+        asyncio.run(waiaconnect.enviar_texto_sync(re.sub(r"\D", "", dono), texto))
     except Exception:  # noqa: BLE001 — aviso é melhor-esforço
         log.exception("Falha ao notificar o dono (%s)", evento)
