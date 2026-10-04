@@ -29,6 +29,10 @@ class Settings:
     waiaconnect_base_url: str = os.getenv("WAIACONNECT_BASE_URL", "https://api.waiaconnect.com")
     waiaconnect_connection_id: str = os.getenv("WAIACONNECT_CONNECTION_ID", "")
 
+    # Token estático do webhook — header X-Connect-Token, definido no painel
+    # WaiaConnect. Independe da senha do admin: trocar SENHA não derruba o webhook.
+    waiaconnect_connect_token: str = os.getenv("WAIACONNECT_CONNECT_TOKEN", "")
+
     # URL deste serviço VISTA PELA WAIA CONNECT (rede docker/host) — destino do webhook.
     webhook_url: str = os.getenv(
         "MCP_WEBHOOK_URL",

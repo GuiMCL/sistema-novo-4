@@ -47,6 +47,19 @@ TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
 # ---------------------------------------------------------------------------
 
 
+def _verificar_token_estatico(request: Request) -> bool:
+    """Valida o header X-Connect-Token (token fixo definido no painel WaiaConnect).
+
+    Sem WAIACONNECT_CONNECT_TOKEN configurado, o header é ignorado — nunca
+    comparado contra string vazia, que aceitaria qualquer requisição.
+    """
+    esperado = settings.waiaconnect_connect_token
+    if not esperado:
+        return False
+    recebido = request.headers.get("x-connect-token", "")
+    return bool(recebido) and secrets.compare_digest(recebido, esperado)
+
+
 def _verificar_assinatura_waiaconnect(request: Request, body: bytes) -> bool:
     """Verifica assinatura HMAC da WaiaConnect.
     
@@ -88,18 +101,20 @@ def _verificar_assinatura_waiaconnect(request: Request, body: bytes) -> bool:
 @router.post("/webhook/waiaconnect")
 async def receber_mensagem_waiaconnect(request: Request, token: str = ""):
     """Endpoint do webhook da WaiaConnect.
-    
+
     Aceita autenticação por:
-    1. Query param `token` (compatibilidade)
-    2. Header HMAC signature (padrão WaiaConnect/Meta)
+    1. Header `X-Connect-Token` (token fixo, padrão do painel)
+    2. Query param `token` (compatibilidade)
+    3. Header HMAC signature (padrão WaiaConnect/Meta)
     """
     body = await request.body()
-    
-    # Tenta HMAC signature primeiro (padrão WaiaConnect)
-    if _verificar_assinatura_waiaconnect(request, body):
-        pass  # assinatura válida
-    # Fallback: token via query param
-    elif not secrets.compare_digest(token, settings.webhook_token):
+
+    autenticado = (
+        _verificar_token_estatico(request)
+        or _verificar_assinatura_waiaconnect(request, body)
+        or secrets.compare_digest(token, settings.webhook_token)
+    )
+    if not autenticado:
         return JSONResponse({"erro": "token inválido"}, status_code=403)
     
     import json
