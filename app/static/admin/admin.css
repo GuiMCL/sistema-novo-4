@@ -645,3 +645,14 @@ html[data-theme="dark"] .agd-backdrop{background:rgba(0,0,0,.6);}
 .proat-acoes .btn-sm{margin:0; white-space:nowrap;}
 .proat-del{background:transparent; border-color:var(--line); color:var(--ink-soft);}
 .proat-del:hover{border-color:var(--oxblood); color:var(--oxblood); background:transparent;}
+
+/* Expediente vazio = todo agendamento falha, inclusive o que a IA registra pelo
+   WhatsApp. O aviso fica acima da lista de agendamentos. */
+.cal-alerta{
+  margin:0 0 14px; padding:11px 14px; border-radius:10px;
+  background:color-mix(in srgb, var(--oxblood) 12%, var(--card));
+  border:1px solid color-mix(in srgb, var(--oxblood) 45%, transparent);
+  color:var(--ink); font-size:.86rem; line-height:1.5;
+}
+.cal-alerta b{color:var(--oxblood);}
+.cal-alerta a{color:var(--accent);}

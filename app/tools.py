@@ -8,6 +8,7 @@ Agrupadas por nível de permissão:
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from . import auth, db, notificacoes, waiaconnect
 from .phone import mesmo_numero, normalizar
+
+log = logging.getLogger("tools")
 
 mcp = FastMCP(
     "agendamentos",
@@ -63,6 +66,18 @@ _NOMES_GENERICOS = {
 
 def _nome_generico(nome: str | None) -> bool:
     return not nome or nome.strip().lower() in _NOMES_GENERICOS
+
+
+def _erro(msg: str, tool: str, **ctx) -> dict:
+    """Resposta de erro de tool que também deixa rastro no log.
+
+    Sem isto a IA recebia só o texto do erro e o cliente ouvia "falha no
+    registro", sem nenhum registro no servidor de POR QUE não registrou — e o
+    pydantic-ai engole exceção de tool em retry silencioso, então dá para ler o
+    motivo exato no próximo log.
+    """
+    log.warning("tool %s recusou: %s | %s", tool, msg, ctx or "")
+    return {"erro": msg}
 
 
 # ---------------------------------------------------------------------------
@@ -294,9 +309,11 @@ def agendar(
                 "erro": "Hoje não é mais possível agendar: o expediente já encerrou. "
                 "Consulte consultar_horarios_disponiveis (sem data) e ofereça o próximo dia com vaga."
             }
-        return {"erro": "Sem expediente nesta data (fechada)."}
+        return _erro("Sem expediente nesta data (fechada).", "agendar", data=data,
+                     n_horarios=len(db.listar_horarios()),
+                     dia_semana=dia.weekday())
     if db.dia_bloqueado(dia):
-        return {"erro": "Sem expediente nesta data (fechada por bloqueio)."}
+        return _erro("Sem expediente nesta data (fechada por bloqueio).", "agendar", data=data)
 
     # Defesa contra agendamento duplicado: o cliente já tem agendamento(s)
     # ativo(s). Sintomas novos NÃO são novo agendamento — só avança com
@@ -334,7 +351,8 @@ def agendar(
     # Usa o horário de funcionamento do dia para definir inicio/fim
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
-        return {"erro": "Sem expediente nesta data."}
+        return _erro("Sem expediente nesta data.", "agendar", data=data,
+                     n_horarios=len(db.listar_horarios()))
     primeiro = horarios[0]
     ultimo = horarios[-1]
     dt_inicio = datetime.combine(dia, time.fromisoformat(primeiro.inicio))
@@ -352,7 +370,8 @@ def agendar(
         origem="bot",
     )
     if not ag:
-        return {"erro": "Todas as vagas ocupadas nesta data. Escolha outro dia."}
+        return _erro("Todas as vagas ocupadas nesta data. Escolha outro dia.", "agendar",
+                     data=data, vagas=len(db.listar_vagas()))
     notificacoes.notificar_dono("agendado", ag, tel)
 
     vaga_nome = ""

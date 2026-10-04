@@ -1,4 +1,11 @@
 <!-- ============ AGENDAMENTOS ============ -->
+{% if not n_horarios %}
+<div class="cal-alerta">
+  <b>Expediente n��o configurado.</b> Sem hor��rio de funcionamento n��o dia nenhum, <b>todo agendamento falha</b>
+  &mdash; inclusive o que a IA tenta registrar pelo WhatsApp, que s�� vira &ldquo;falha no registro&rdquo; para o cliente.
+  Cadastre os hor��rios no cart��o <a href="#horarios-card">Hor��rios de Funcionamento</a>, logo abaixo.
+</div>
+{% endif %}
 <div class="card drag-sec" data-sec="agendamentos">
   <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
   {% if not apenas_ativos %}
