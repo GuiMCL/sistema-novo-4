@@ -86,9 +86,13 @@ class _StaticNoCache(StaticFiles):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def file_response(self, *args, **kwargs):
-        resposta = super().file_response(*args, **kwargs)
-        if resposta.path.lower().endswith((".js", ".css")):
+    def file_response(self, full_path, *args, **kwargs):
+        resposta = super().file_response(full_path, *args, **kwargs)
+        # Usa full_path, nunca `resposta.path`: quando o navegador revalida
+        # (If-Modified-Since) o StaticFiles devolve NotModifiedResponse, que não
+        # tem `.path`. Ler o atributo levantava AttributeError e transformava o
+        # 304 em 500 — o painel inteiro quebrava a cada reload.
+        if str(full_path).lower().endswith((".js", ".css")):
             resposta.headers["Cache-Control"] = "no-cache"
         return resposta
 

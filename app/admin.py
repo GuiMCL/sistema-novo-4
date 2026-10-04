@@ -400,18 +400,18 @@ def salvar_lembrete(
 
 
 @router.get("/admin/whatsapp/estado")
-def whatsapp_estado(_: str = Depends(autenticar)):
+async def whatsapp_estado(_: str = Depends(autenticar)):
     try:
-        return waiaconnect.verificar_conexao()
+        return await waiaconnect.verificar_conexao()
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
 @router.get("/admin/whatsapp/templates")
-def whatsapp_templates(_: str = Depends(autenticar)):
+async def whatsapp_templates(_: str = Depends(autenticar)):
     """Lista templates aprovados disponíveis na WaiaConnect."""
     try:
-        return {"templates": waiaconnect.listar_templates()}
+        return {"templates": await waiaconnect.listar_templates()}
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -422,12 +422,12 @@ def whatsapp_templates(_: str = Depends(autenticar)):
 
 
 @router.get("/admin/instancia/{instancia_id}/estado")
-def instancia_estado(instancia_id: int, _: db.Usuario = Depends(auth.login_required)):
+async def instancia_estado(instancia_id: int, _: db.Usuario = Depends(auth.login_required)):
     inst = db.get_instancia(instancia_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
     try:
-        return waiaconnect.verificar_conexao(inst.nome)
+        return await waiaconnect.verificar_conexao(inst.nome)
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=502)
 
