@@ -17,6 +17,7 @@ import re
 import secrets
 import time
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -43,6 +44,12 @@ _timers: dict[str, asyncio.Task] = {}
 # Template padrão para fallback fora da janela de 24h
 # Configure no painel da WaiaConnect/Meta e coloque o nome exato aqui
 TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
+
+# Falhas de envio que NÃO podem derrubar o restante da resposta: falta de
+# template fora da janela (ValueError) e rejeição do Meta na hora de enviar
+# (HTTPStatusError de raise_for_status — template inexistente, não aprovado,
+# fora da janela mesmo assim). Uma bolha falha; as próximas ainda saem.
+_ERROS_DE_ENVIO = (ValueError, httpx.HTTPStatusError, httpx.HTTPError)
 
 # Tolerância de replay da assinatura do webhook (spec WaiaConnect: 5 min)
 ASSINATURA_TOLERANCIA_S = 300
@@ -232,8 +239,14 @@ def contato_ocupado(telefone: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def enviar_bolhas(numero: str, resposta: str) -> None:
-    """Divide em bolhas e envia via WaiaConnect (texto ou template se >24h)."""
+async def enviar_bolhas(numero: str, resposta: str) -> bool:
+    """Divide em bolhas e envia via WaiaConnect (texto ou template se >24h).
+
+    Devolve True se pelo menos uma bolha foi aceita. Quem depende da entrega
+    checar isso (ex.: o lembrete de confirmação, que só marca
+    `aguardando_confirmacao` se o cliente realmente recebeu o pedido).
+    """
+    aceitou = False
     for bolha in dividir_bolhas(resposta):
         segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
         try:
@@ -243,10 +256,15 @@ async def enviar_bolhas(numero: str, resposta: str) -> None:
                 template_fallback=TEMPLATE_FALLBACK_PADRAO,
                 language="pt_BR",
             )
-        except ValueError as e:
-            # Fora da janela e sem template configurado — loga mas não quebra
+            aceitou = True
+        except _ERROS_DE_ENVIO as e:
+            # Fora da janela sem template, ou template rejeitado pelo Meta: a
+            # bolha se perde, mas o resto da resposta continua indo. Sem isto o
+            # HTTPStatusError de `raise_for_status` derrubava o laço inteiro e o
+            # cliente recebia só a primeira parte.
             log.warning("Não conseguiu enviar para %s: %s", numero, e)
         await asyncio.sleep(segundos / 1000)  # converte ms para segundos
+    return aceitou
 
 
 async def enviar_texto_simples(numero: str, texto: str) -> None:
@@ -258,7 +276,7 @@ async def enviar_texto_simples(numero: str, texto: str) -> None:
             template_fallback=TEMPLATE_FALLBACK_PADRAO,
             language="pt_BR",
         )
-    except ValueError as e:
+    except _ERROS_DE_ENVIO as e:
         log.warning("Não conseguiu enviar texto simples para %s: %s", numero, e)
 
 

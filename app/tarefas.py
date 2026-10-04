@@ -119,7 +119,18 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
             return
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
-        await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem)
+        entregue = await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem)
+
+        if not entregue:
+            # O cliente não recebeu o pedido de confirmação. Marcar
+            # `aguardando_confirmacao` aqui faria o agente tratar um "sim"
+            # solto como confirmação de um lembrete que ele nunca viu, e o
+            # contador de lembretes advanced mesmo sem nada ter saído.
+            log.warning(
+                "Lembrete do ag #%d não foi entregue — pulando marcação de confirmação",
+                ag.id,
+            )
+            return
 
         # O lembrete entra na MESMA memória da conversa: quando o cliente
         # responder "sim/confirmo/ok", o agente vê o que foi perguntado e trata

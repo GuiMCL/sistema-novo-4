@@ -470,21 +470,26 @@ async def executar_tarefa(telefone: str, instrucao: str) -> str:
 def registrar_na_memoria(telefone: str, texto: str, papel: str) -> None:
     """Anexa uma mensagem à memória do contato SEM acionar o agente.
 
-    `papel` "cliente" → ModelRequest(UserPromptPart); "bot" → ModelResponse(
-    TextPart). Usa a MESMA serialização e a MESMA janela (`_aparar`) de
-    `responder`, então ao despausar — ou depois de uma resposta manual do
-    painel — o agente retoma com o contexto completo. Turnos consecutivos do
-    mesmo papel são aceitáveis. `telefone` é a chave de memória (remoteJid),
+    Só `papel == "cliente"` vira UserPromptPart (fala do cliente). Qualquer
+    outro papel — "bot", "admin", "Nome (atendente)" — vira ModelResponse,
+    porque quem escreve é a empresa: o painel renderiza pelo tipo da parte
+    (`historico_para_bolhas`), então uma mensagem do atendente salva como
+    user-part aparecia do lado do cliente e ainda poluía o contexto do agente
+    com palavras que o cliente nunca disse.
+
+    Usa a MESMA serialização e a MESMA janela (`_aparar`) de `responder`, então
+    ao despausar — ou depois de uma resposta manual do painel — o agente retoma
+    com o contexto completo. `telefone` é a chave de memória (remoteJid),
     igual ao 1º argumento de `responder`.
     """
     conteudo = (texto or "").strip()
     if not conteudo:
         return
     msgs = _carregar_memoria(telefone)
-    if papel == "bot":
-        msgs.append(ModelResponse(parts=[TextPart(content=conteudo)]))
-    else:
+    if papel == "cliente":
         msgs.append(ModelRequest(parts=[UserPromptPart(content=conteudo)]))
+    else:
+        msgs.append(ModelResponse(parts=[TextPart(content=conteudo)]))
     msgs = _aparar(msgs)
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())
 

@@ -175,16 +175,22 @@ async def api_conversa_enviar(
     if not numero:
         raise HTTPException(status_code=400, detail="Telefone inválido.")
 
+    usuario = auth.login_required(request)
+    nome_atendente = usuario.nome if usuario else "bot"
+
+    # Grava ANTES de enviar. Se o envio falhar (template fora da janela de 24h
+    # rejeitado pelo Meta, API fora), a mensagem do atendente continua no
+    # histórico do /atendimento — antes ela sumia junto com o 502, e o painel
+    # ficava mostrando só o que já estava gravado de antes.
+    agente.registrar_na_memoria(
+        db.resolver_chave_conversa(telefone), msg, f"{nome_atendente} (atendente)"
+    )
+
     try:
         await enviar_bolhas(numero, msg)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    usuario = auth.login_required(request)
-    nome_atendente = usuario.nome if usuario else "bot"
-    agente.registrar_na_memoria(
-        db.resolver_chave_conversa(telefone), msg, f"{nome_atendente} (atendente)"
-    )
     return {"ok": True}
 
 
