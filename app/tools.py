@@ -268,9 +268,10 @@ def consultar_horarios_disponiveis(
 
 @mcp.tool()
 def agendar(
-    servico_id: int,
     nome_cliente: str,
     data: str,
+    servico_id: int | None = None,
+    servico_nome: str = "",
     veiculo: str = "",
     placa: str = "",
     observacoes: str = "",
@@ -279,6 +280,13 @@ def agendar(
 ) -> dict:
     """Agenda um serviço para uma data. `data` no formato YYYY-MM-DD.
     A vaga é auto-atribuída. O cliente ocupa uma vaga (box) no DIA inteiro.
+
+    `servico_id` é OPCIONAL. Se houver mais de um serviço no catálogo, escolha o
+    mais próximo. Se o catálogo estiver vazio — ou se o cliente só descreveu o
+    que precisa sem nomear serviço nenhum — **agende assim mesmo** passando só
+    `servico_nome` com o que o cliente disse. NÃO pergunte ao cliente qual
+    serviço é: ele não conhece o catálogo, e insistir nisso impede o
+    agendamento. É o mesmo caminho do formulário manual do painel.
 
     Para oficina: informe `veiculo` (modelo do carro) e `placa` se o cliente
     mencionar. O telefone do cliente é o do solicitante (injetado pelo pipeline).
@@ -292,9 +300,12 @@ def agendar(
         return auth.NEGADO_SEM_SOLICITANTE
     if _nome_generico(nome_cliente):
         return {"erro": "Nome ausente ou genérico. Pergunte o nome real do cliente antes de agendar."}
-    servico = db.get_servico(servico_id)
-    if not servico:
-        return {"erro": "Serviço não encontrado."}
+    # Sem catálogo (ou com o cliente apenas descrevendo o problema) o serviço vai
+    # por texto livre: `servico_id` é anulável e o nome fica em `servico_nome`.
+    servico = db.get_servico(servico_id) if servico_id is not None else None
+    if servico_id is not None and not servico:
+        return _erro("Serviço não encontrado.", "agendar", servico_id=servico_id,
+                     catalogo=[s.id for s in db.listar_servicos_ativos()])
     try:
         dia = date.fromisoformat(data)
     except ValueError:
@@ -367,6 +378,10 @@ def agendar(
         veiculo=veiculo,
         placa=placa.upper(),
         observacoes=observacoes,
+        # Sem catálogo, o que o cliente descreveu vira o nome do serviço — mesmo
+        # caminho do formulário manual. Sem isso o agendamento não era criado.
+        servico_nome=(servico.nome if servico else servico_nome.strip()),
+        descricao=(servico_nome.strip() if servico else ""),
         origem="bot",
     )
     if not ag:
