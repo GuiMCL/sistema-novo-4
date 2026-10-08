@@ -41,6 +41,21 @@ def test_disponibilidade_sem_data_lista_dias_e_hoje_nao_entra(seg_18h):
     assert len(datas) > 1
 
 
+def test_disponibilidade_sem_data_ignora_hoje_lotado(seg_manha, cliente):
+    """Mesmo com hoje lotado, a sugestão automática começa amanhã."""
+    criar_vaga("Box 1")
+    servico = criar_servico()
+    r_agenda = tools.agendar(
+        servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-17"
+    )
+    assert r_agenda.get("ok") is True
+
+    r = tools.consultar_horarios_disponiveis()
+    datas = [d["data"] for d in r["dias_disponiveis"]]
+    assert "2026-08-17" not in datas
+    assert datas[0] == "2026-08-18"
+
+
 def test_disponibilidade_com_data_marca_pode_agendar_falso_hoje_fechado(seg_18h):
     r = tools.consultar_horarios_disponiveis(data="2026-08-17")
     assert r["pode_agendar"] is False

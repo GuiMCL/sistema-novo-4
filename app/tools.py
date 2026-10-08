@@ -110,7 +110,8 @@ def consultar_horarios_disponiveis(
     então a disponibilidade é por dia, não por horário de relógio.
 
     - SEM `data`: retorna os próximos dias com expediente e vaga livre (até
-      `quantidade_dias` dias à frente) — use para SUGERIR datas ao cliente.
+      `quantidade_dias` dias à frente), começando em amanhã — hoje nunca é
+      sugerido automaticamente. Hoje só é consultado com `data` explícita.
       Dias que o próprio cliente JÁ TEM agendamento saem em `dias_do_cliente`
       (marcados como dele) e NÃO aparecem como vaga livre.
     - COM `data` (formato YYYY-MM-DD): retorna se o dia tem vaga livre, quantas
@@ -142,7 +143,9 @@ def consultar_horarios_disponiveis(
     if not data.strip():
         agora = _agora_local()
         dias_disponiveis: list[dict] = []
-        for i in range(max(1, quantidade_dias)):
+        # Regra comercial: a busca automática nunca oferece o dia atual,
+        # mesmo que ainda exista expediente e vaga. Hoje exige pedido explícito.
+        for i in range(1, max(1, quantidade_dias) + 1):
             candidato = (agora.date() + timedelta(days=i)).isoformat()
             dia = date.fromisoformat(candidato)
             # Regra de expediente: dia sem funcionamento OU hoje já encerrado

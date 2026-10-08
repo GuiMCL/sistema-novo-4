@@ -65,3 +65,12 @@ def test_system_prompt_inclui_contexto_e_regras():
     assert "perguntadas de novo" in prompt
     assert "Mensagens curtas" in prompt
     assert "atualizar_observacoes" in prompt
+
+
+def test_system_prompt_preserva_confirmacao_de_data_e_responde_horario():
+    prompt = agente.PROMPT_GERAL_PADRAO
+
+    assert "REGRA DE CONFIRMAÇÃO DA DATA" in prompt
+    assert "Uma pergunta posterior não desfaz uma confirmação anterior" in prompt
+    assert "não há horário individual" in prompt
+    assert "NUNCA responda repetindo \"qual dia?\"" in prompt
