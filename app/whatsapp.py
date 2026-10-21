@@ -43,7 +43,7 @@ _timers: dict[str, asyncio.Task] = {}
 
 # Template padrão para fallback fora da janela de 24h.
 # O nome e o idioma precisam corresponder exatamente ao modelo aprovado na Meta.
-TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
+TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento2"
 IDIOMA_TEMPLATE_FALLBACK = "es"
 
 # Falhas de envio que NÃO podem derrubar o restante da resposta: falta de

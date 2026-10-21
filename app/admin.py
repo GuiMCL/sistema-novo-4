@@ -950,7 +950,7 @@ async def conversa_enviar(
         await waiaconnect.enviar_inteligente(
             numero,
             msg,
-            template_fallback="fora_horario_atendimento",
+            template_fallback="fora_horario_atendimento2",
             language="es",
         )
     except Exception as e:
