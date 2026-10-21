@@ -41,9 +41,10 @@ DEBOUNCE_S = 6.0
 _buffers: dict[str, list[str]] = {}
 _timers: dict[str, asyncio.Task] = {}
 
-# Template padrão para fallback fora da janela de 24h
-# Configure no painel da WaiaConnect/Meta e coloque o nome exato aqui
+# Template padrão para fallback fora da janela de 24h.
+# O nome e o idioma precisam corresponder exatamente ao modelo aprovado na Meta.
 TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento"
+IDIOMA_TEMPLATE_FALLBACK = "es"
 
 # Falhas de envio que NÃO podem derrubar o restante da resposta: falta de
 # template fora da janela (ValueError) e rejeição do Meta na hora de enviar
@@ -254,7 +255,7 @@ async def enviar_bolhas(numero: str, resposta: str) -> bool:
                 numero,
                 bolha,
                 template_fallback=TEMPLATE_FALLBACK_PADRAO,
-                language="pt_BR",
+                language=IDIOMA_TEMPLATE_FALLBACK,
             )
             aceitou = True
         except _ERROS_DE_ENVIO as e:
@@ -274,7 +275,7 @@ async def enviar_texto_simples(numero: str, texto: str) -> None:
             numero,
             texto,
             template_fallback=TEMPLATE_FALLBACK_PADRAO,
-            language="pt_BR",
+            language=IDIOMA_TEMPLATE_FALLBACK,
         )
     except _ERROS_DE_ENVIO as e:
         log.warning("Não conseguiu enviar texto simples para %s: %s", numero, e)

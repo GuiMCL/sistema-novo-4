@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, auth, db, ia, tarefas, waiaconnect
+from . import agente, auth, db, ia, tarefas, waiaconnect, whatsapp
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import _agora_local
@@ -951,7 +951,7 @@ async def conversa_enviar(
             numero,
             msg,
             template_fallback="fora_horario_atendimento",
-            language="pt_BR",
+            language="es",
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail="Não foi possível enviar pelo WhatsApp.") from e
