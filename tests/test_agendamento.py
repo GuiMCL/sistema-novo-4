@@ -99,6 +99,19 @@ def test_agendar_data_passada_rejeita(cliente):
     assert "passada" in r.get("erro", "").lower()
 
 
+def test_ia_ignora_agendamento_de_dia_que_ja_passou(seg_manha, cliente):
+    """Reserva histórica não impede o cliente de fazer um novo agendamento."""
+    db.criar_agendamento(
+        nome_cliente="Adrieli", telefone_cliente=cliente,
+        inicio="2026-08-16T08:00", fim="2026-08-16T17:00",
+    )
+    servico = criar_servico()
+    r = tools.agendar(
+        servico_id=servico.id, nome_cliente="Adrieli", data="2026-08-18",
+    )
+    assert r.get("ok") is True
+
+
 def test_agendar_dia_fechado_bloqueio_rejeita(seg_manha, cliente):
     servico = criar_servico()
     db.criar_bloqueio(data="2026-08-17", inicio=None, fim=None, motivo="imprevisto")

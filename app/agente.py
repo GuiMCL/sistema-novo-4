@@ -233,7 +233,7 @@ def _contexto_cliente() -> str:
         return ""
     try:
         cli = db.get_cliente(tel)
-        ags = [a for a in db.agendamentos_do_telefone(tel) if a.status in db.STATUS_VIGENTES]
+        ags = [a for a in db.agendamentos_do_telefone(tel) if db.agendamento_em_vigencia(a)]
     except Exception:
         return ""
 

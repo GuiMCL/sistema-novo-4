@@ -266,6 +266,24 @@ def test_agendar_sem_vaga_retorna_409(painel, expediente):
     assert r.status_code == 409
 
 
+def test_reagendar_por_dia_aceita_o_campo_enviado_pelo_front(painel, expediente):
+    """O modal envia `nova_data` e o backend remarca o dia inteiro."""
+    ag = db.criar_agendamento(
+        nome_cliente="Reagendar", telefone_cliente="5545999990013",
+        inicio=f"{SEGUNDA}T08:00", fim=f"{SEGUNDA}T17:00",
+    )
+    nova = (date.fromisoformat(SEGUNDA) + timedelta(days=7)).isoformat()
+    r = painel.post(
+        f"/admin/agendamento/{ag.id}/reagendar",
+        data={"nova_data": nova},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, r.text[:500]
+    atualizado = db.get_agendamento(ag.id)
+    assert atualizado.inicio == f"{nova}T08:00"
+    assert atualizado.fim == f"{nova}T17:00"
+
+
 # ---------------------------------------------------------------------------
 # Persistência do novo campo
 # ---------------------------------------------------------------------------

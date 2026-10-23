@@ -846,7 +846,7 @@ def reagendar_agendamento(
     agendamento_id: int,
     request: Request,
     _: db.Usuario = Depends(auth.admin_required),
-    novo_inicio: str = Form(...),
+    nova_data: str = Form(...),
     avisar_cliente: str = Form(""),
 ):
     ag = db.get_agendamento(agendamento_id)
@@ -854,12 +854,18 @@ def reagendar_agendamento(
         raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
     servico = db.get_servico(ag.servico_id) if ag.servico_id else None
     try:
-        dt_inicio = datetime.fromisoformat(novo_inicio)
+        dia = date.fromisoformat(nova_data)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Horário inválido.")
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    if dia < _agora_local().date():
+        raise HTTPException(status_code=400, detail="Não é possível reagendar para uma data passada.")
+    horarios = db.horarios_do_dia(dia.weekday())
+    if not horarios:
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
     inicio_anterior = ag.inicio
-    dur = servico.duracao_min if servico else 60
-    novo_fim = (dt_inicio + timedelta(minutes=dur)).isoformat(timespec="minutes")
+    dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
+    dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))
+    novo_fim = dt_fim.isoformat(timespec="minutes")
     ok = db.reagendar_agendamento(agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim)
     if ok and avisar_cliente and _avisar_cliente_permitido(ag):
         db.criar_aviso_cliente(

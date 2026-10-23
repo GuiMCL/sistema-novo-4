@@ -28,6 +28,25 @@ from .phone import mesmo_numero, normalizar
 # painel — tudo que filtrava só por "ativo" perdia esses agendamentos.
 STATUS_VIGENTES = ("ativo", "confirmado")
 
+
+def agendamento_em_vigencia(agendamento: "Agendamento", agora: datetime | None = None) -> bool:
+    """Indica se um agendamento ainda deve ser considerado pela IA.
+
+    O histórico continua preservado e disponível para o painel. Para o fluxo
+    conversacional, porém, uma reserva de um dia anterior não é mais um
+    atendimento ativo, mesmo que o status não tenha sido atualizado pela
+    equipe depois da execução do serviço.
+    """
+    if agendamento.status not in STATUS_VIGENTES:
+        return False
+    try:
+        dia = date.fromisoformat((agendamento.inicio or "")[:10])
+    except ValueError:
+        return False
+    if agora is None:
+        agora = _agora_local_db()
+    return dia >= agora.date()
+
 # ---------------------------------------------------------------------------
 # Modelos (tabelas)
 # ---------------------------------------------------------------------------

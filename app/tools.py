@@ -134,8 +134,10 @@ def consultar_horarios_disponiveis(
     nome_servico = servico.nome if servico else ""
 
     tel = auth.requester(telefone_solicitante)
+    agora = _agora_local()
     meus_vigentes = (
-        [a for a in db.agendamentos_do_telefone(tel) if a.status in db.STATUS_VIGENTES]
+        [a for a in db.agendamentos_do_telefone(tel)
+         if db.agendamento_em_vigencia(a, agora)]
         if tel
         else []
     )
@@ -337,7 +339,7 @@ def agendar(
     # ativo(s). Sintomas novos NÃO são novo agendamento — só avança com
     # confirmação explícita (confirmar_existente) de um novo atendimento.
     existentes = db.agendamentos_do_telefone(tel)
-    existentes_vigentes = [a for a in existentes if a.status in db.STATUS_VIGENTES]
+    existentes_vigentes = [a for a in existentes if db.agendamento_em_vigencia(a, agora)]
     if existentes_vigentes:
         if any(a.inicio.startswith(dia.isoformat()) for a in existentes_vigentes):
             return {
@@ -411,7 +413,12 @@ def meus_agendamentos(telefone_solicitante: str | None = None) -> list[dict]:
     tel = auth.requester(telefone_solicitante)
     if not tel:
         return [auth.NEGADO_SEM_SOLICITANTE]
-    return [db.como_dict(a) for a in db.agendamentos_do_telefone(tel)]
+    agora = _agora_local()
+    return [
+        db.como_dict(a)
+        for a in db.agendamentos_do_telefone(tel)
+        if db.agendamento_em_vigencia(a, agora)
+    ]
 
 
 @mcp.tool()
