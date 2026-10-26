@@ -67,7 +67,6 @@ def _verificar_token_estatico(request: Request) -> bool:
     Sem WAIACONNECT_CONNECT_TOKEN configurado, o header é ignorado — nunca
     comparado contra string vazia, que aceitaria qualquer requisição.
     """
-    
     esperado = settings.waiaconnect_connect_token
     if not esperado:
         return False
