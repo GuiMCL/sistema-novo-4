@@ -37,6 +37,19 @@ class Settings:
     # na criação do endpoint). Vazio = não valida assinatura, só o token estático.
     waiaconnect_webhook_secret: str = os.getenv("WAIACONNECT_WEBHOOK_SECRET", "")
 
+    # Template aprovado para confirmações/lembretes de agendamento. O modelo
+    # deve ter três variáveis no corpo: nome, serviço e data, nessa ordem.
+    whatsapp_appointment_template: str = os.getenv(
+        "WHATSAPP_APPOINTMENT_TEMPLATE", "lembrete_agendamento"
+    )
+    whatsapp_appointment_template_2: str = os.getenv(
+        "WHATSAPP_APPOINTMENT_TEMPLATE_2", "confirmacao_agendamento"
+    )
+    whatsapp_generic_template: str = os.getenv(
+        "WHATSAPP_GENERIC_TEMPLATE", "fora_horario_atendimento"
+    )
+    whatsapp_template_language: str = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE", "es")
+
     # URL deste serviço VISTA PELA WAIA CONNECT (rede docker/host) — destino do webhook.
     webhook_url: str = os.getenv(
         "MCP_WEBHOOK_URL",

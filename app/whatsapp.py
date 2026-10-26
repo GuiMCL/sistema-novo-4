@@ -43,7 +43,7 @@ _timers: dict[str, asyncio.Task] = {}
 
 # Template padrão para fallback fora da janela de 24h.
 # O nome e o idioma precisam corresponder exatamente ao modelo aprovado na Meta.
-TEMPLATE_FALLBACK_PADRAO = "fora_horario_atendimento2"
+TEMPLATE_FALLBACK_PADRAO = settings.whatsapp_generic_template
 IDIOMA_TEMPLATE_FALLBACK = "es"
 
 # Falhas de envio que NÃO podem derrubar o restante da resposta: falta de
@@ -240,7 +240,12 @@ def contato_ocupado(telefone: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def enviar_bolhas(numero: str, resposta: str) -> bool:
+async def enviar_bolhas(
+    numero: str,
+    resposta: str,
+    template_components: list[dict] | None = None,
+    template_fallback: str | None = None,
+) -> bool:
     """Divide em bolhas e envia via WaiaConnect (texto ou template se >24h).
 
     Devolve True se pelo menos uma bolha foi aceita. Quem depende da entrega
@@ -254,8 +259,9 @@ async def enviar_bolhas(numero: str, resposta: str) -> bool:
             await enviar_inteligente(
                 numero,
                 bolha,
-                template_fallback=TEMPLATE_FALLBACK_PADRAO,
+                template_fallback=template_fallback or TEMPLATE_FALLBACK_PADRAO,
                 language=IDIOMA_TEMPLATE_FALLBACK,
+                components=template_components,
             )
             aceitou = True
         except _ERROS_DE_ENVIO as e:
@@ -266,6 +272,34 @@ async def enviar_bolhas(numero: str, resposta: str) -> bool:
             log.warning("Não conseguiu enviar para %s: %s", numero, e)
         await asyncio.sleep(segundos / 1000)  # converte ms para segundos
     return aceitou
+
+
+def _componentes_template_agendamento(nome: str, servico: str, data: str) -> list[dict]:
+    """Monta as variáveis do template aprovado, sempre na ordem da Meta."""
+    return [{
+        "type": "body",
+        "parameters": [
+            {"type": "text", "text": str(nome)},
+            {"type": "text", "text": str(servico)},
+            {"type": "text", "text": str(data)},
+        ],
+    }]
+
+
+async def enviar_template_agendamento(
+    numero: str, nome: str, servico: str, data: str,
+    segundo_estagio: bool = False,
+) -> None:
+    """Envia a confirmação parametrizada de agendamento pela Meta."""
+    await enviar_template(
+        numero,
+        template_name=(
+            settings.whatsapp_appointment_template_2
+            if segundo_estagio else settings.whatsapp_appointment_template
+        ),
+        language=settings.whatsapp_template_language,
+        components=_componentes_template_agendamento(nome, servico, data),
+    )
 
 
 async def enviar_texto_simples(numero: str, texto: str) -> None:

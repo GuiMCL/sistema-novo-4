@@ -12,6 +12,7 @@ import logging
 import random
 
 from . import agente, db, ia, whatsapp
+from .config import settings
 from .notificacoes import data_e_hora_br
 from .tools import _agora_local
 
@@ -119,7 +120,18 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
             return
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
-        entregue = await whatsapp.enviar_bolhas(alvo.split("@")[0], mensagem)
+        # Dentro da janela de 24h segue texto livre; fora dela o fallback
+        # aprovado recebe as variáveis do agendamento na ordem correta.
+        componentes = whatsapp._componentes_template_agendamento(
+            ag.nome_cliente, nome_servico, data
+        )
+        entregue = await whatsapp.enviar_bolhas(
+            alvo.split("@")[0], mensagem, template_components=componentes,
+            template_fallback=(
+                settings.whatsapp_appointment_template_2
+                if stage == 1 else settings.whatsapp_appointment_template
+            ),
+        )
 
         if not entregue:
             # O cliente não recebeu o pedido de confirmação. Marcar
