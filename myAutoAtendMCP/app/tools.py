@@ -127,7 +127,8 @@ def consultar_horarios_disponiveis(
     if not data.strip():
         agora = _agora_local()
         dias_disponiveis: list[dict] = []
-        for i in range(max(1, quantidade_dias)):
+        # Regra universal: a busca automática começa sempre amanhã.
+        for i in range(1, max(1, quantidade_dias) + 1):
             candidato = (agora.date() + timedelta(days=i)).isoformat()
             intervalos = db.horarios_do_dia(date.fromisoformat(candidato).weekday())
             if not intervalos:
@@ -150,6 +151,16 @@ def consultar_horarios_disponiveis(
         dia = date.fromisoformat(data)
     except ValueError:
         return {"erro": "Data inválida. Use o formato YYYY-MM-DD."}
+
+    if dia <= _agora_local().date():
+        return {
+            "data": data,
+            "servico": nome_servico,
+            "dia_livre": False,
+            "vagas_livres": 0,
+            "total_vagas": total_vagas,
+            "aviso": "Não é possível agendar no dia atual ou em data passada. A primeira data disponível é amanhã.",
+        }
 
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
@@ -206,8 +217,12 @@ def agendar(
         dia = date.fromisoformat(data)
     except ValueError:
         return {"erro": "Data inválida. Use YYYY-MM-DD."}
-    if dia < _agora_local().date():
-        return {"erro": "Não é possível agendar para uma data passada."}
+    hoje = _agora_local().date()
+    if dia <= hoje:
+        return {"erro": (
+            "Não é possível agendar no dia atual. A primeira data permitida é amanhã."
+            if dia == hoje else "Não é possível agendar para uma data passada."
+        )}
     # Usa o horário de funcionamento do dia para definir inicio/fim
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
@@ -284,8 +299,12 @@ def reagendar(
         dia = date.fromisoformat(nova_data)
     except ValueError:
         return {"erro": "Data inválida. Use YYYY-MM-DD."}
-    if dia < _agora_local().date():
-        return {"erro": "Não é possível remarcar para uma data passada."}
+    hoje = _agora_local().date()
+    if dia <= hoje:
+        return {"erro": (
+            "Não é possível remarcar para o dia atual. A primeira data permitida é amanhã."
+            if dia == hoje else "Não é possível remarcar para uma data passada."
+        )}
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         return {"erro": "Sem expediente nesta data."}

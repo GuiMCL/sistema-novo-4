@@ -205,11 +205,23 @@ def consultar_horarios_disponiveis(
     except ValueError:
         return {"erro": "Data inválida. Use o formato YYYY-MM-DD."}
 
+    agora = _agora_local()
+    if dia <= agora.date():
+        return {
+            "data": data,
+            "servico": nome_servico,
+            "dia_livre": False,
+            "pode_agendar": False,
+            "vagas_livres": 0,
+            "horarios": [],
+            "total_vagas": total_vagas,
+            "aviso": "Não é possível agendar no dia atual ou em data passada. A primeira data disponível é amanhã.",
+        }
+
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
         return {"data": data, "servico": nome_servico, "horarios": [], "aviso": "Sem expediente neste dia (fechado)."}
 
-    agora = _agora_local()
     pode_agendar = db.pode_agendar_no_dia(dia, agora)
     aviso = ""
     if not pode_agendar and dia == agora.date():
@@ -321,8 +333,11 @@ def agendar(
         return {"erro": "Data inválida. Use YYYY-MM-DD."}
 
     agora = _agora_local()
-    if dia < agora.date():
-        return {"erro": "Não é possível agendar para uma data passada."}
+    if dia <= agora.date():
+        return {"erro": (
+            "Não é possível agendar no dia atual. A primeira data permitida é amanhã."
+            if dia == agora.date() else "Não é possível agendar para uma data passada."
+        )}
     if not db.pode_agendar_no_dia(dia, agora):
         if dia == agora.date():
             return {
@@ -479,8 +494,12 @@ def reagendar(
         dt_inicio = datetime.fromisoformat(novo_inicio)
     except ValueError:
         return {"erro": "Horário inválido. Use YYYY-MM-DDTHH:MM."}
-    if dt_inicio < _agora_local():
-        return {"erro": "Não é possível remarcar para um horário no passado."}
+    agora = _agora_local()
+    if dt_inicio.date() <= agora.date():
+        return {"erro": (
+            "Não é possível remarcar para o dia atual. A primeira data permitida é amanhã."
+            if dt_inicio.date() == agora.date() else "Não é possível remarcar para uma data passada."
+        )}
     dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min if servico else 60)
     if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
         return {"erro": "Fora do horário de funcionamento."}

@@ -26,6 +26,9 @@ if (modal) {
 
   function abrir() {
     form.reset();
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    dataInput.min = amanha.toISOString().slice(0, 10);
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
     form.querySelector('[name="nome_cliente"]').focus();

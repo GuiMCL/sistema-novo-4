@@ -906,6 +906,8 @@ def novo_agendamento(
         dia = date.fromisoformat(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    if dia <= _agora_local().date():
+        raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
@@ -963,6 +965,11 @@ def reagendar_agendamento(
         dia = date.fromisoformat(nova_data)
     except ValueError:
         raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    if dia <= _agora_local().date():
+        raise HTTPException(status_code=400, detail=(
+            "Não é possível reagendar para o dia atual. A primeira data permitida é amanhã."
+            if dia == _agora_local().date() else "Não é possível reagendar para uma data passada."
+        ))
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")

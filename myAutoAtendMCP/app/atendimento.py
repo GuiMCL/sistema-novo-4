@@ -248,6 +248,9 @@ def api_criar_agendamento(
         dia = date.fromisoformat(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    from .tools import _agora_local
+    if dia <= _agora_local().date():
+        raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
 
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:

@@ -244,6 +244,9 @@ def api_criar_agendamento(
         dt_inicio = datetime.fromisoformat(inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
+    from .tools import _agora_local
+    if dt_inicio.date() <= _agora_local().date():
+        raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
 
     fim = (dt_inicio + timedelta(minutes=duracao_min)).isoformat(timespec="minutes")
     ag = db.criar_agendamento(
