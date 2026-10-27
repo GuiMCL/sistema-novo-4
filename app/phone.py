@@ -81,4 +81,22 @@ def mesmo_numero(a: str | None, b: str | None) -> bool:
     na, nb = normalizar(a), normalizar(b)
     if not na or not nb:
         return False
-    return na == nb
+    if na == nb:
+        return True
+
+    # O WhatsApp/Meta pode alternar entre o formato brasileiro antigo
+    # (DDD + 8 dígitos) e o atual (DDD + 9 dígitos). Ex.:
+    # 5544991151238 e 554491151238 são o mesmo contato.
+    def variantes(numero: str) -> set[str]:
+        digitos = numero.lstrip("+")
+        resultado = {digitos}
+        if digitos.startswith("55") and len(digitos) in (12, 13):
+            prefixo = digitos[:4]  # país + DDD
+            local = digitos[4:]
+            if len(local) == 9 and local.startswith("9"):
+                resultado.add(prefixo + local[1:])
+            elif len(local) == 8:
+                resultado.add(prefixo + "9" + local)
+        return resultado
+
+    return bool(variantes(na) & variantes(nb))

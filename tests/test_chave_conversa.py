@@ -46,6 +46,10 @@ def test_mesmo_numero_ignora_dispositivo():
     assert db.mesmo_numero(JID_DISPOSITIVO, JID_LIMPO)
 
 
+def test_mesmo_numero_tolera_nono_digito_brasileiro():
+    assert db.mesmo_numero("5544991151238", "554491151238")
+
+
 # ---------------------------------------------------------------------------
 # Divergência de chave
 # ---------------------------------------------------------------------------
