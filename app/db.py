@@ -1481,7 +1481,7 @@ def agendamentos_precisando_lembrete(agora: str, horas_antes: int, stage: int = 
             s.exec(
                 select(Agendamento)
                 .where(
-                    Agendamento.status.in_(["ativo", "confirmado"]),
+                    Agendamento.status == "ativo",
                     Agendamento.inicio <= limite,
                     Agendamento.inicio > agora,
                     Agendamento.lembretes_enviados == stage,
@@ -1495,7 +1495,7 @@ def reservar_lembrete(agendamento_id: int, stage: int, agora: str) -> bool:
     """Reserva um lembrete de forma atômica para apenas um worker enviá-lo."""
     with _lock, _session() as s:
         a = s.get(Agendamento, agendamento_id)
-        if not a or a.status not in STATUS_VIGENTES or a.lembretes_enviados != stage:
+        if not a or a.status != "ativo" or a.lembretes_enviados != stage:
             return False
         if a.lembrete_em_processamento:
             try:

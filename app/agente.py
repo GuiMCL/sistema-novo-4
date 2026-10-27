@@ -463,6 +463,15 @@ def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
         if a.status == "ativo" and a.aguardando_confirmacao
         and db.agendamento_em_vigencia(a)
     ]
+    # Janela de corrida: o cliente pode responder imediatamente depois do
+    # envio, antes de o worker gravar `aguardando_confirmacao`. Se já houve
+    # lembrete e existe um único agendamento ativo, ele é o alvo inequívoco.
+    if not pendentes:
+        pendentes = [
+            a for a in db.agendamentos_do_telefone(telefone_efetivo)
+            if a.status == "ativo" and (a.lembretes_enviados or 0) > 0
+            and db.agendamento_em_vigencia(a)
+        ]
     if len(pendentes) != 1:
         return None
 
