@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from app import auth, db, tools
+from app import agente, auth, db, tools
 from tests.conftest import criar_servico
 
 MANHA = datetime(2026, 8, 17, 9, 0)
@@ -72,3 +72,20 @@ def test_reagendar_limpa_aguardando_confirmacao(seg_manha, cliente):
     r = tools.reagendar(ag["id"], "2026-08-19T09:00")
     assert r.get("ok") is True
     assert db.get_agendamento(ag["id"]).aguardando_confirmacao == 0
+
+
+def test_resposta_afirmativa_confirma_lembrete_sem_ia(cliente):
+    ag = db.criar_agendamento(
+        nome_cliente="Adrieli", telefone_cliente=cliente,
+        inicio="2099-08-18T08:00", fim="2099-08-18T17:00",
+    )
+    with db._lock, db._session() as s:
+        registro = s.get(db.Agendamento, ag.id)
+        registro.aguardando_confirmacao = 1
+        s.add(registro)
+        s.commit()
+
+    resposta = agente._confirmar_lembrete_pendente("Sim, confirmo!")
+
+    assert resposta == "Pronto, seu agendamento foi confirmado."
+    assert db.get_agendamento(ag.id).status == "confirmado"

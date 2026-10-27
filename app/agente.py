@@ -19,6 +19,7 @@ log = logging.getLogger("agente")
 
 import contextvars
 import re
+import unicodedata
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -410,6 +411,10 @@ async def responder(telefone: str, mensagem: str) -> str:
     Pré-condição: `auth.solicitante_ctx` já setado pelo pipeline (whatsapp.py)
     com o remoteJid do remetente.
     """
+    confirmacao = _confirmar_lembrete_pendente(mensagem)
+    if confirmacao is not None:
+        return confirmacao
+
     cfg = ia._config("texto")  # IANaoConfigurada se sem chave
     model = OpenAIChatModel(
         cfg.modelo or ia.MODELO_PADRAO["texto"],
@@ -431,6 +436,45 @@ async def responder(telefone: str, mensagem: str) -> str:
     msgs = _aparar(list(result.all_messages()))
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())
     return limpar_raciocinio(result.output)
+
+
+def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
+    """Confirma diretamente um lembrete quando a resposta é inequívoca.
+
+    A confirmação não deve depender da IA recuperar o ID no histórico: o
+    agendamento pertence ao telefone do remetente e a flag abaixo só é ligada
+    depois que o lembrete foi aceito pelo provedor de WhatsApp.
+    """
+    texto = unicodedata.normalize("NFD", mensagem or "")
+    texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    texto = re.sub(r"[^a-zA-Z0-9]+", " ", texto).strip().lower()
+    aceitas = {
+        "sim", "sim confirmo", "sim pode confirmar", "confirmo", "confirmado", "pode confirmar", "confirmar",
+        "ok", "okay", "fechou", "pode ser", "tudo certo", "esta confirmado",
+    }
+    if texto not in aceitas:
+        return None
+
+    telefone_efetivo = auth.requester()
+    if not telefone_efetivo:
+        return None
+    pendentes = [
+        a for a in db.agendamentos_do_telefone(telefone_efetivo)
+        if a.status == "ativo" and a.aguardando_confirmacao
+        and db.agendamento_em_vigencia(a)
+    ]
+    if len(pendentes) != 1:
+        return None
+
+    agendamento = pendentes[0]
+    resultado = tools.confirmar_agendamento(agendamento.id)
+    if not resultado.get("ok"):
+        log.warning(
+            "Falha na confirmação automática do agendamento #%s: %s",
+            agendamento.id, resultado,
+        )
+        return None
+    return "Pronto, seu agendamento foi confirmado."
 
 
 def limpar_raciocinio(texto: str) -> str:
