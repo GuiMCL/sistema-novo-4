@@ -223,7 +223,13 @@ async def _esperar_e_responder(remote_jid: str) -> None:
 async def _responder_contato(remote_jid: str, mensagem: str) -> None:
     token = auth.solicitante_ctx.set(remote_jid)
     try:
-        resposta = await agente.responder(remote_jid, mensagem)
+        # Confirmação de lembrete é determinística e não deve depender da
+        # IA recuperar o agendamento no histórico da conversa.
+        confirmacao = agente._confirmar_lembrete_pendente(mensagem, remote_jid)
+        if confirmacao is not None:
+            resposta = confirmacao
+        else:
+            resposta = await agente.responder(remote_jid, mensagem)
     finally:
         auth.solicitante_ctx.reset(token)
 

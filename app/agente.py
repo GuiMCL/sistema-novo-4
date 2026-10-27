@@ -411,7 +411,7 @@ async def responder(telefone: str, mensagem: str) -> str:
     Pré-condição: `auth.solicitante_ctx` já setado pelo pipeline (whatsapp.py)
     com o remoteJid do remetente.
     """
-    confirmacao = _confirmar_lembrete_pendente(mensagem)
+    confirmacao = _confirmar_lembrete_pendente(mensagem, auth.requester(telefone))
     if confirmacao is not None:
         return confirmacao
 
@@ -438,7 +438,9 @@ async def responder(telefone: str, mensagem: str) -> str:
     return limpar_raciocinio(result.output)
 
 
-def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
+def _confirmar_lembrete_pendente(
+    mensagem: str, telefone: str | None = None
+) -> str | None:
     """Confirma diretamente um lembrete quando a resposta é inequívoca.
 
     A confirmação não deve depender da IA recuperar o ID no histórico: o
@@ -455,7 +457,7 @@ def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
     if texto not in aceitas:
         return None
 
-    telefone_efetivo = auth.requester()
+    telefone_efetivo = auth.requester(telefone)
     if not telefone_efetivo:
         return None
     pendentes = [
@@ -472,6 +474,10 @@ def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
             if a.status == "ativo" and (a.lembretes_enviados or 0) > 0
             and db.agendamento_em_vigencia(a)
         ]
+    log.info(
+        "Resposta de confirmação para %s: %d agendamento(s) elegível(is)",
+        telefone_efetivo, len(pendentes),
+    )
     if not pendentes:
         return None
 
