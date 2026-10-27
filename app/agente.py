@@ -472,10 +472,16 @@ def _confirmar_lembrete_pendente(mensagem: str) -> str | None:
             if a.status == "ativo" and (a.lembretes_enviados or 0) > 0
             and db.agendamento_em_vigencia(a)
         ]
-    if len(pendentes) != 1:
+    if not pendentes:
         return None
 
-    agendamento = pendentes[0]
+    # Pode haver reservas antigas/duplicadas para o mesmo contato. A resposta
+    # "sim" ao lembrete deve atingir o agendamento que recebeu o lembrete
+    # mais recentemente, não cair no fluxo de novo agendamento.
+    agendamento = max(
+        pendentes,
+        key=lambda a: (a.ultimo_lembrete or "", a.inicio or "", a.id or 0),
+    )
     resultado = tools.confirmar_agendamento(agendamento.id)
     if not resultado.get("ok"):
         log.warning(
