@@ -1493,18 +1493,36 @@ def agendamentos_precisando_lembrete(agora: str, horas_antes: int, stage: int = 
 
 def reservar_lembrete(agendamento_id: int, stage: int, agora: str) -> bool:
     """Reserva um lembrete de forma atômica para apenas um worker enviá-lo."""
+    limite = (datetime.fromisoformat(agora) - timedelta(minutes=15)).isoformat(timespec="seconds")
+    # UPDATE condicional: o lock Python nÃ£o protege processos diferentes.
+    # O SQLite garante que somente uma tentativa altere a linha.
+    with engine.begin() as conn:
+        resultado = conn.exec_driver_sql(
+            """
+            UPDATE agendamento
+               SET lembrete_em_processamento = 1,
+                   lembrete_processamento_em = ?
+             WHERE id = ?
+               AND status = 'ativo'
+               AND lembretes_enviados = ?
+               AND (lembrete_em_processamento = 0 OR lembrete_processamento_em < ?)
+            """,
+            (agora, agendamento_id, stage, limite),
+        )
+        return resultado.rowcount == 1
+
+
+def registrar_lembrete_manual(agendamento_id: int, agora: str) -> bool:
+    """Marca a confirmaÃ§Ã£o enviada pelo painel como os dois estÃ¡gios feitos."""
     with _lock, _session() as s:
         a = s.get(Agendamento, agendamento_id)
-        if not a or a.status != "ativo" or a.lembretes_enviados != stage:
+        if not a or a.status != "ativo":
             return False
-        if a.lembrete_em_processamento:
-            try:
-                if datetime.fromisoformat(a.lembrete_processamento_em) > datetime.fromisoformat(agora) - timedelta(minutes=15):
-                    return False
-            except (TypeError, ValueError):
-                pass
-        a.lembrete_em_processamento = 1
-        a.lembrete_processamento_em = agora
+        a.lembretes_enviados = 2
+        a.ultimo_lembrete = agora
+        a.aguardando_confirmacao = 1
+        a.lembrete_em_processamento = 0
+        a.lembrete_processamento_em = ""
         s.add(a)
         s.commit()
         return True

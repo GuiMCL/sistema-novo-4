@@ -822,6 +822,7 @@ def novo_agendamento(
         modelo=modelo.strip(),
         ano=ano.strip(),
         descricao=descricao.strip(),
+        origem="painel",
     )
     if not ag:
         raise HTTPException(status_code=409, detail="Sem vagas disponíveis nesta data.")
@@ -837,6 +838,9 @@ def novo_agendamento(
                 segundo_estagio=True,
             )
         )
+        # A confirmaÃ§Ã£o manual jÃ¡ Ã© o lembrete final; o worker nÃ£o deve
+        # disparar novamente os estÃ¡gios automÃ¡ticos deste agendamento.
+        db.registrar_lembrete_manual(ag.id, datetime.now().isoformat(timespec="seconds"))
     except Exception:
         # O agendamento já foi gravado; falha de template não deve desfazer a
         # operação. O erro fica registrado para correção no Meta/WaiaConnect.
