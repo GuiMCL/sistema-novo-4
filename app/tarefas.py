@@ -85,6 +85,10 @@ async def _disparar_lembretes(agora: datetime) -> None:
 
 async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> None:
     """Envia um lembrete gerado por IA e incrementa o contador."""
+    if not db.reservar_lembrete(ag.id, stage, agora.isoformat(timespec="seconds")):
+        log.info("Lembrete do ag #%d já está sendo processado; ignorando duplicata", ag.id)
+        return
+    reservado = True
     try:
         nome_servico = db.nome_servico(ag) or "servico"
         data, hora = data_e_hora_br(ag.inicio)
@@ -117,6 +121,8 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
             mensagem = await ia.completar(system, user)
         except ia.IANaoConfigurada:
             log.warning("IA nao configurada — lembrete do ag #%d suprimido", ag.id)
+            db.liberar_lembrete(ag.id)
+            reservado = False
             return
 
         alvo = db.resolver_chave_conversa(ag.telefone_cliente)
@@ -142,6 +148,8 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
                 "Lembrete do ag #%d não foi entregue — pulando marcação de confirmação",
                 ag.id,
             )
+            db.liberar_lembrete(ag.id)
+            reservado = False
             return
 
         # O lembrete entra na MESMA memória da conversa: quando o cliente
@@ -152,17 +160,16 @@ async def _enviar_lembrete(ag: db.Agendamento, stage: int, agora: datetime) -> N
         except Exception:
             log.warning("Lembrete do ag #%d: falha ao registrar na memória", ag.id)
 
-        with db._lock, db._session() as s:
-            a = s.get(db.Agendamento, ag.id)
-            if a:
-                a.lembretes_enviados = (a.lembretes_enviados or 0) + 1
-                a.ultimo_lembrete = agora.isoformat(timespec="seconds")
-                a.aguardando_confirmacao = 1
-                s.add(a)
-                s.commit()
+        if not db.concluir_lembrete(
+            ag.id, stage, agora.isoformat(timespec="seconds")
+        ):
+            log.warning("Lembrete do ag #%d perdeu a reserva antes da conclusão", ag.id)
+        reservado = False
 
         log.info("Lembrete (estagio %d) enviado p/ %s (ag #%d)", stage, ag.nome_cliente, ag.id)
     except Exception as e:
+        if reservado:
+            db.liberar_lembrete(ag.id)
         log.error("Erro no lembrete do ag #%d: %s", ag.id, e)
 
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from threading import Lock
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -275,6 +275,10 @@ class Agendamento(SQLModel, table=True):
     # 1 = um lembrete de confirmação foi enviado e ainda não houve resposta
     # (o agente deve tratar "sim/confirmo/ok" como CONFIRMAÇÃO, não novo atendimento).
     aguardando_confirmacao: int = 0
+    # Reserva atômica do worker para impedir envio duplicado em múltiplos
+    # processos/instâncias. A reserva expira para permitir recuperação após crash.
+    lembrete_em_processamento: int = 0
+    lembrete_processamento_em: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +365,8 @@ def _migrar() -> None:
                 ("confirmado_em", "VARCHAR NOT NULL DEFAULT ''"),
                 ("origem", "VARCHAR NOT NULL DEFAULT 'bot'"),
                 ("aguardando_confirmacao", "INTEGER NOT NULL DEFAULT 0"),
+                ("lembrete_em_processamento", "INTEGER NOT NULL DEFAULT 0"),
+                ("lembrete_processamento_em", "VARCHAR NOT NULL DEFAULT ''"),
                 ("servico_nome", "VARCHAR NOT NULL DEFAULT ''"),
                 ("descricao", "VARCHAR NOT NULL DEFAULT ''"),
             ]:
@@ -1479,11 +1485,54 @@ def agendamentos_precisando_lembrete(agora: str, horas_antes: int, stage: int = 
                     Agendamento.inicio <= limite,
                     Agendamento.inicio > agora,
                     Agendamento.lembretes_enviados == stage,
+                    Agendamento.lembrete_em_processamento == 0,
                 )
             ).all()
         )
 
 
+def reservar_lembrete(agendamento_id: int, stage: int, agora: str) -> bool:
+    """Reserva um lembrete de forma atômica para apenas um worker enviá-lo."""
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or a.status not in STATUS_VIGENTES or a.lembretes_enviados != stage:
+            return False
+        if a.lembrete_em_processamento:
+            try:
+                if datetime.fromisoformat(a.lembrete_processamento_em) > datetime.fromisoformat(agora) - timedelta(minutes=15):
+                    return False
+            except (TypeError, ValueError):
+                pass
+        a.lembrete_em_processamento = 1
+        a.lembrete_processamento_em = agora
+        s.add(a)
+        s.commit()
+        return True
+
+
+def liberar_lembrete(agendamento_id: int) -> None:
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if a:
+            a.lembrete_em_processamento = 0
+            a.lembrete_processamento_em = ""
+            s.add(a)
+            s.commit()
+
+
+def concluir_lembrete(agendamento_id: int, stage: int, agora: str) -> bool:
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or not a.lembrete_em_processamento or a.lembretes_enviados != stage:
+            return False
+        a.lembretes_enviados = stage + 1
+        a.ultimo_lembrete = agora
+        a.aguardando_confirmacao = 1
+        a.lembrete_em_processamento = 0
+        a.lembrete_processamento_em = ""
+        s.add(a)
+        s.commit()
+        return True
 # ---------------------------------------------------------------------------
 # Util
 # ---------------------------------------------------------------------------

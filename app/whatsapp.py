@@ -253,7 +253,15 @@ async def enviar_bolhas(
     `aguardando_confirmacao` se o cliente realmente recebeu o pedido).
     """
     aceitou = False
-    for bolha in dividir_bolhas(resposta):
+    # Lembretes usam um template aprovado quando o contato está fora da
+    # janela de 24h. Um template por bolha faria uma mensagem da IA com 3
+    # linhas enviar o MESMO lembrete 3 vezes. Template/lembrete é sempre uma
+    # única mensagem; o texto completo continua sendo enviado dentro da
+    # janela de 24h.
+    bolhas = [resposta.strip()] if template_components else dividir_bolhas(resposta)
+    for bolha in bolhas:
+        if not bolha:
+            continue
         segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
         try:
             await enviar_inteligente(

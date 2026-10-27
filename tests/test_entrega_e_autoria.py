@@ -70,6 +70,26 @@ def test_enviar_bolhas_reporta_que_saiu(monkeypatch):
     assert asyncio.run(whatsapp.enviar_bolhas(TEL, "oi")) is True
 
 
+def test_lembrete_com_template_e_enviado_uma_unica_vez(monkeypatch):
+    enviados = []
+
+    async def ok(numero, texto, **kwargs):
+        enviados.append((texto, kwargs.get("components")))
+        return {"ok": True}
+
+    monkeypatch.setattr(whatsapp, "enviar_inteligente", ok)
+    componentes = [{"type": "body", "parameters": []}]
+
+    assert asyncio.run(
+        whatsapp.enviar_bolhas(
+            TEL, "primeira linha\nsegunda linha\nterceira linha",
+            template_components=componentes,
+        )
+    ) is True
+    assert len(enviados) == 1
+    assert enviados[0][1] == componentes
+
+
 def test_value_error_fora_da_janela_tambem_e_engolido(monkeypatch):
     async def sem_template(*a, **k):
         raise ValueError("Fora da janela de 24h")
