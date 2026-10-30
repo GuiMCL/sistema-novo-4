@@ -804,6 +804,8 @@ def novo_agendamento(
         raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
     if dia <= _agora_local().date():
         raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
+    if dia.weekday() == db.DIA_FECHADO_SABADO:
+        raise HTTPException(status_code=400, detail="A empresa não realiza agendamentos aos sábados.")
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
@@ -888,6 +890,8 @@ def reagendar_agendamento(
             "Não é possível reagendar para o dia atual. A primeira data permitida é amanhã."
             if dia == hoje else "Não é possível reagendar para uma data passada."
         ))
+    if dia.weekday() == db.DIA_FECHADO_SABADO:
+        raise HTTPException(status_code=400, detail="A empresa não realiza agendamentos aos sábados.")
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")

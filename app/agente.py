@@ -146,6 +146,14 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
 - Seja breve, como numa conversa real de WhatsApp. Evite listas formais e linguagem corporativa."""
 
+# Regras comerciais obrigatórias. Ficam fora do texto editável do painel para
+# continuarem valendo mesmo quando o dono salva um prompt personalizado.
+POLITICA_EMPRESA_OBRIGATORIA = """## Política da empresa — ReviZê Auto Center
+- Não trabalhamos com peças fornecidas pelo cliente. Explique com cordialidade que usamos peças próprias para garantir procedência, compatibilidade e a garantia do serviço.
+- Quando o cliente trouxer uma peça própria, não prometa instalação: ofereça agendar uma avaliação e informar o orçamento correto.
+- A empresa não realiza agendamentos aos sábados. Nunca sugira, confirme ou tente agendar uma data de sábado; consulte a ferramenta e ofereça o próximo dia útil disponível.
+"""
+
 # Tools expostas ao agente — funções originais de app/tools.py, montadas por
 # remetente. Defesa em profundidade: a autorização fina continua em auth.py,
 # mas as tools exclusivas do dono nem entram na lista do cliente (o modelo não
@@ -330,7 +338,7 @@ def _system_prompt() -> str:
     # Remetente vem do contextvar (setado no pipeline antes do run) — mesmo
     # critério usado p/ montar o toolset em `responder`.
     geral, mcp = prompt_atual(auth.eh_dono())
-    partes = [prefixo, _contexto_cliente(), geral.strip()]
+    partes = [prefixo, POLITICA_EMPRESA_OBRIGATORIA, _contexto_cliente(), geral.strip()]
     if mcp.strip():
         partes.append(mcp.strip())
     return "\n\n".join(p for p in partes if p)

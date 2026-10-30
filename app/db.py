@@ -28,6 +28,10 @@ from .phone import mesmo_numero, normalizar
 # painel — tudo que filtrava só por "ativo" perdia esses agendamentos.
 STATUS_VIGENTES = ("ativo", "confirmado")
 
+# Regra comercial fixa: a oficina não atende aos sábados, mesmo que alguém
+# tenha cadastrado intervalos nesse dia pela grade do painel.
+DIA_FECHADO_SABADO = 5  # datetime.weekday(): segunda=0 ... sábado=5
+
 
 def agendamento_em_vigencia(agendamento: "Agendamento", agora: datetime | None = None) -> bool:
     """Indica se um agendamento ainda deve ser considerado pela IA.
@@ -470,6 +474,8 @@ def limpar_horarios() -> None:
 def dentro_do_funcionamento(inicio: datetime, fim: datetime) -> bool:
     """True se [inicio, fim] cabe inteiro num intervalo de funcionamento do dia."""
     dia = inicio.date()
+    if dia.weekday() == DIA_FECHADO_SABADO:
+        return False
     for h in horarios_do_dia(dia.weekday()):
         h_ini = datetime.fromisoformat(f"{dia}T{h.inicio}")
         h_fim = datetime.fromisoformat(f"{dia}T{h.fim}")
@@ -502,6 +508,8 @@ def pode_agendar_no_dia(dia: date, agora: datetime | None = None) -> bool:
     `dia_bloqueado`. `agora` sem fuso é tratado como local no fuso da Config
     (mesma convenção do restante do sistema).
     """
+    if dia.weekday() == DIA_FECHADO_SABADO:
+        return False
     if agora is None:
         agora = _agora_local_db()
     else:

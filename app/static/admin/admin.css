@@ -328,12 +328,20 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(232,96,28,.16); colo
 #prompt-card .card-head{cursor:pointer; user-select:none;}
 #prompt-geral{min-height:220px; font-size:14.5px;}
 #prompt-mcp-dono,#prompt-mcp-cliente{min-height:160px; font-family:"JetBrains Mono",monospace; font-size:13px;}
+.policy-preview{display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,34%); gap:18px; align-items:center;
+  background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px; margin:0 0 22px;}
+.policy-preview h3{font-family:"DM Serif Display",serif; font-size:22px; font-weight:400; margin:0 0 6px;}
+.policy-preview p{font-size:13.5px; line-height:1.45; margin:6px 0; color:var(--ink-soft);}
+.policy-preview p b{color:var(--ink);}
+.policy-preview .policy-lock{color:var(--oxblood); font-weight:700;}
+.policy-preview img{display:block; width:100%; max-height:190px; object-fit:cover; object-position:center; border-radius:9px; border:1px solid var(--line);}
 .prompt-avancado{margin-top:18px; border:1px dashed var(--gold-soft); border-radius:12px; padding:0 16px;}
 .prompt-avancado summary{cursor:pointer; user-select:none; padding:14px 0; font-weight:600; color:var(--ink-soft);}
 .prompt-avancado[open] summary{border-bottom:1px dashed var(--gold-soft);}
 .prompt-aviso{background:rgba(184,134,47,.12); border-left:3px solid var(--gold); border-radius:6px;
   padding:10px 14px; font-size:13.5px; color:var(--ink-soft); margin:14px 0 0;}
 .prompt-avancado .ia-acts{margin-bottom:16px;}
+@media(max-width:600px){ .policy-preview{grid-template-columns:1fr;} .policy-preview img{max-height:none;} }
 
 /* ---------- Configuração geral ---------- */
 #config-card .card-head{cursor:pointer; user-select:none;}

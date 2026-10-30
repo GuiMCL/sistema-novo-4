@@ -205,6 +205,18 @@ def consultar_horarios_disponiveis(
     except ValueError:
         return {"erro": "Data inválida. Use o formato YYYY-MM-DD."}
 
+    if dia.weekday() == db.DIA_FECHADO_SABADO:
+        return {
+            "data": data,
+            "servico": nome_servico,
+            "dia_livre": False,
+            "pode_agendar": False,
+            "vagas_livres": 0,
+            "horarios": [],
+            "total_vagas": total_vagas,
+            "aviso": "A empresa não realiza agendamentos aos sábados. Consulte outra data.",
+        }
+
     agora = _agora_local()
     if dia <= agora.date():
         return {
@@ -331,6 +343,9 @@ def agendar(
         dia = date.fromisoformat(data)
     except ValueError:
         return {"erro": "Data inválida. Use YYYY-MM-DD."}
+
+    if dia.weekday() == db.DIA_FECHADO_SABADO:
+        return {"erro": "A empresa não realiza agendamentos aos sábados. Escolha outra data."}
 
     agora = _agora_local()
     if dia <= agora.date():
