@@ -8,7 +8,7 @@ linha em `Conversa`:
 
     5545999900001@s.whatsapp.net      <- painel (envio do atendente)
     5545999900001:12@s.whatsapp.net   <- webhook (cliente + IA)
-
+ 
 Como `resolver_chave_conversa` casa por número normalizado, o painel lia só a
 sua linha: aparecia **somente** a mensagem do atendente. Cliente e IA ficavam
 invisíveis.
