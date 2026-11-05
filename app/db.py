@@ -228,21 +228,22 @@ class LembreteConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     ativo: bool = True
 
-    # Primeiro estágio (DISPARO 1): exemplo 48h antes
-    horas_antes: int = 48
+    # Aviso único: sempre no dia anterior à data agendada.
+    horas_antes: int = 24
     mensagem: str = (
-        "Ola {nome}! So passando para lembrar do nosso agendamento para depois de amanha. "
+        "Ola {nome}! So passando para lembrar do nosso agendamento para amanha. "
         "Ate la! Tenha um excelente dia."
     )
 
-    # Segundo estágio (DISPARO 2): exemplo 24h antes
+    # Segundo estágio fica desativado por padrão: o fluxo comercial envia
+    # somente o aviso de D-2 (ex.: 48h antes), nunca um segundo aviso em D-1.
     horas_antes2: int = 24
     mensagem2: str = (
         "Ola {nome}! Passando para confirmar seu horario de amanha as {hora} para {servico}. "
         "Para adiantar seu cadastro, poderia me informar seu Nome Completo, CPF e Telefone? "
         "Fico no aguardo!"
     )
-    ativo2: bool = True
+    ativo2: bool = False
 
     confirmar_automatically: bool = True  # confirma se responder "sim"
     cancelar_se_nao_confirmar: bool = False  # cancela se não responder em X horas
@@ -320,6 +321,24 @@ def init_db() -> None:
             s.commit()
     if not tinha_horarios:
         restaurar_horarios_padrao()
+    # Destinos oficiais de atendimento. O seed é idempotente e não sobrescreve
+    # alterações feitas pelo estabelecimento no painel.
+    destinos_padrao = (
+        ("financeiro", "5544888574708", "Revize Financeiro"),
+        ("patio_oficina", "5544888335636", "Revize Pátio Oficina"),
+    )
+    with _session() as s:
+        destinos = {d.nome for d in s.exec(select(TransferenciaDestino)).all()}
+        for nome, telefone, _descricao in destinos_padrao:
+            if nome not in destinos:
+                s.add(TransferenciaDestino(
+                    nome=nome,
+                    telefone=telefone,
+                    mensagem=(
+                        f"Contato: {telefone}"
+                    ),
+                ))
+        s.commit()
     # Seed do admin: se não há nenhum usuário, cria admin com LOGIN/SENHA do .env
     with _session() as s:
         if not s.exec(select(Usuario)).first():

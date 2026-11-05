@@ -806,6 +806,8 @@ def novo_agendamento(
         raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
     if dia.weekday() == db.DIA_FECHADO_SABADO:
         raise HTTPException(status_code=400, detail="A empresa não realiza agendamentos aos sábados.")
+    if db.dia_bloqueado(dia):
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data (feriado ou dia fechado).")
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
@@ -895,6 +897,8 @@ def reagendar_agendamento(
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")
+    if db.dia_bloqueado(dia):
+        raise HTTPException(status_code=400, detail="Sem expediente nesta data (feriado ou dia fechado).")
     inicio_anterior = ag.inicio
     dt_inicio = datetime.combine(dia, time.fromisoformat(horarios[0].inicio))
     dt_fim = datetime.combine(dia, time.fromisoformat(horarios[-1].fim))

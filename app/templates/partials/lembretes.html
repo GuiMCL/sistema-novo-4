@@ -12,22 +12,22 @@
       </div>
     </div>
 
-    <h4 style="margin:16px 0 8px;font-size:14px">Primeiro aviso (DISPARO 1)</h4>
+    <h4 style="margin:16px 0 8px;font-size:14px">Aviso único (24 horas antes)</h4>
     <div class="row">
       <div>
         <label>Enviar quantas horas antes?</label>
-        <input name="horas_antes" type="number" value="{{ lembrete.horas_antes }}" min="0" max="336" required>
+        <input name="horas_antes" type="number" value="24" min="24" max="24" readonly required>
       </div>
     </div>
     <p class="meta" style="margin-top:8px"><strong>As mensagens sao geradas automaticamente pela IA</strong> com os dados do agendamento (nome, servico, data, hora). O tom e cordial e profissional, sem emojis.</p>
     <input name="mensagem" type="hidden" value="">
     <input name="mensagem2" type="hidden" value="">
 
-    <h4 style="margin:16px 0 8px;font-size:14px">Segundo aviso (DISPARO 2)</h4>
+    <h4 style="margin:16px 0 8px;font-size:14px">Segundo aviso (descontinuado)</h4>
     <div>
       <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;font-size:14px;cursor:pointer;margin-bottom:8px">
         <input type="checkbox" name="ativo2" value="true" style="width:auto;margin:0" {% if lembrete.ativo2 %}checked{% endif %}>
-        Ativar segundo aviso
+          Segundo aviso não utilizado
       </label>
     </div>
     <div class="row">

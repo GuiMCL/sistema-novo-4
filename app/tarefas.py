@@ -23,6 +23,7 @@ JANELA_INICIO = "08:00"
 JANELA_FIM = "20:00"
 MAX_TENTATIVAS = 3
 PAUSA_ENTRE_TAREFAS_S = 3.0
+LEMBRETE_HORAS_ANTES = 24
 
 
 async def worker() -> None:
@@ -57,7 +58,7 @@ async def _tick() -> None:
 
 
 async def _disparar_lembretes(agora: datetime) -> None:
-    """Dispara lembretes em dois estagios: D-2 (aviso) e D-1 (confirmacao + dados)."""
+    """Dispara somente um aviso 24h antes da data agendada."""
     try:
         config = db.get_lembrete_config()
         if not config.ativo:
@@ -65,19 +66,15 @@ async def _disparar_lembretes(agora: datetime) -> None:
 
         agora_iso = agora.isoformat(timespec="minutes")
 
-        # Estagio 1: primeiro aviso (ex: 48h antes)
-        stage1 = config.horas_antes > 0
+        # Aviso único: exatamente 24h antes. A configuração antiga de 48h
+        # não deve alterar esta regra comercial.
+        stage1 = True
         if stage1:
-            for ag in db.agendamentos_precisando_lembrete(agora_iso, config.horas_antes, stage=0):
+            for ag in db.agendamentos_precisando_lembrete(agora_iso, LEMBRETE_HORAS_ANTES, stage=0):
                 await _enviar_lembrete(ag, 0, agora)
                 await asyncio.sleep(PAUSA_ENTRE_TAREFAS_S + random.random() * 1)
 
-        # Estagio 2: segundo aviso (ex: 24h antes) com pedido de dados
-        stage2 = config.ativo2 and config.horas_antes2 > 0
-        if stage2:
-            for ag in db.agendamentos_precisando_lembrete(agora_iso, config.horas_antes2, stage=1):
-                await _enviar_lembrete(ag, 1, agora)
-                await asyncio.sleep(PAUSA_ENTRE_TAREFAS_S + random.random() * 1)
+        # Não existe segundo disparo.
 
     except Exception as e:
         log.error("Erro disparando lembretes: %s", e)

@@ -155,6 +155,10 @@ def consultar_horarios_disponiveis(
             # NÃO pode ser agendado — nunca sugira essas datas.
             if not db.pode_agendar_no_dia(dia, agora):
                 continue
+            # Feriados e fechamentos cadastrados como bloqueio de dia inteiro
+            # nunca podem aparecer como sugestão de vaga.
+            if db.dia_bloqueado(dia):
+                continue
             intervalos = db.horarios_do_dia(dia.weekday())
             if not intervalos:
                 continue
@@ -215,6 +219,18 @@ def consultar_horarios_disponiveis(
             "horarios": [],
             "total_vagas": total_vagas,
             "aviso": "A empresa não realiza agendamentos aos sábados. Consulte outra data.",
+        }
+
+    if db.dia_bloqueado(dia):
+        return {
+            "data": data,
+            "servico": nome_servico,
+            "dia_livre": False,
+            "pode_agendar": False,
+            "vagas_livres": 0,
+            "horarios": [],
+            "total_vagas": total_vagas,
+            "aviso": "Sem expediente nesta data (feriado ou dia fechado). Consulte outra data.",
         }
 
     agora = _agora_local()
@@ -687,69 +703,26 @@ def transferir_atendimento(destino: str, telefone_solicitante: str | None = None
     d = db.get_destino_transferencia(destino.strip().lower())
     if not d:
         return {"erro": f"Destino '{destino}' nao encontrado. Destinos disponiveis: consulte listar_destinos_transferencia."}
-    from .agente import registrar_na_memoria
-    from .waiaconnect import enviar_texto_sync as enviar_sync
-    from .phone import formatar_internacional
-
-    # Informacoes do cliente
-    cli = db.get_cliente(tel)
-    nome_cliente = cli.nome if cli and cli.nome else tel
-    agendamentos = db.agendamentos_do_telefone(tel)
-    info_ag = ""
-    if agendamentos:
-        ultimo = agendamentos[-1]
-        nome_serv = db.nome_servico(ultimo)
-        dt = (ultimo.inicio or "").replace("T", " ") if ultimo.inicio else ""
-        info_ag = f" | {nome_serv} {dt}" if nome_serv else ""
-    tel_fmt = formatar_internacional(tel) or tel
-
-    # Envia notificacao para o setor de destino
-    notificacao = (
-        f"Cliente {nome_cliente} ({tel_fmt}) pediu transferencia "
-        f"para {d.nome}.{info_ag}"
-    )
-    if d.instancia_id:
-        inst = db.get_instancia(d.instancia_id)
-        if inst and inst.numero:
-            try:
-                enviar_sync(inst.numero, notificacao)
-            except Exception:
-                pass
-    elif d.telefone:
-        try:
-            enviar_sync(d.telefone, notificacao)
-        except Exception:
-            pass
-
-    # Pausa o bot para o cliente
-    try:
-        db.set_pausa_cliente(tel, True)
-    except Exception:
-        pass
-
-    # Registra na memoria que houve transferencia
-    registrar_na_memoria(tel, f"[SISTEMA] Atendimento transferido para {d.nome}", "sistema")
-
-    # Envia confirmacao pro cliente
-    try:
-        aviso = d.mensagem.format(nome=d.nome, cliente=nome_cliente)
-        enviar_sync(tel, aviso)
-    except Exception:
-        pass
-
+    tel_destino = d.telefone or ""
     return {
         "ok": True,
         "destino": d.nome,
-        "mensagem": d.mensagem.format(nome=d.nome, cliente=nome_cliente),
-        "telefone_contato": d.telefone or "",
-        "bot_pausado": True,
+        "mensagem": f"Contato: {tel_destino}",
+        "telefone_contato": tel_destino,
     }
 
 
 @mcp.tool()
 def listar_destinos_transferencia(telefone_solicitante: str | None = None) -> list[dict]:
     """Lista os destinos disponiveis para transferencia de atendimento."""
-    return [{"nome": d.nome, "mensagem": d.mensagem} for d in db.listar_destinos_transferencia()]
+    return [
+        {
+            "nome": d.nome,
+            "telefone": d.telefone,
+            "mensagem": f"Contato: {d.telefone}",
+        }
+        for d in db.listar_destinos_transferencia()
+    ]
 
 
 @mcp.tool()

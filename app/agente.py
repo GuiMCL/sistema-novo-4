@@ -152,6 +152,9 @@ POLITICA_EMPRESA_OBRIGATORIA = """## Política da empresa — ReviZê Auto Cente
 - Não trabalhamos com peças fornecidas pelo cliente. Explique com cordialidade que usamos peças próprias para garantir procedência, compatibilidade e a garantia do serviço.
 - Quando o cliente trouxer uma peça própria, não prometa instalação: ofereça agendar uma avaliação e informar o orçamento correto.
 - A empresa não realiza agendamentos aos sábados. Nunca sugira, confirme ou tente agendar uma data de sábado; consulte a ferramenta e ofereça o próximo dia útil disponível.
+- Feriados e dias fechados cadastrados nunca são datas disponíveis. Só ofereça datas retornadas pela ferramenta.
+- Para assuntos financeiros, informe somente o contato Revize Financeiro: +55 44 8857-4708. Para status de serviço, andamento ou assuntos do pátio/oficina, informe somente Revize Pátio Oficina: +55 44 8833-5636.
+- Você é secretaria de atendimento: não invente informações. Para financeiro, informe somente Revize Financeiro (+55 44 8857-4708). Para ver o progresso/status do serviço ou falar diretamente com Elias, informe somente Revize Pátio Oficina (+55 44 8833-5636). Não faça diagnóstico, não invente status e não prometa transferência: apenas informe o contato retornado pela ferramenta.
 """
 
 # Tools expostas ao agente — funções originais de app/tools.py, montadas por
