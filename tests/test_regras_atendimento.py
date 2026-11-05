@@ -54,3 +54,36 @@ def test_worker_nao_dispara_lembrete_de_24_horas(monkeypatch):
     asyncio.run(tarefas._disparar_lembretes(datetime(2026, 11, 5, 8, 0)))
 
     assert chamadas == [(24, 0)]
+
+
+def test_lembrete_considera_apenas_o_dia_seguinte():
+    amanha = db.Agendamento(
+        status="ativo",
+        telefone_cliente="5511999999999",
+        nome_cliente="Cliente",
+        inicio="2026-11-06T17:00",
+        fim="2026-11-06T18:00",
+        lembretes_enviados=0,
+        lembrete_em_processamento=0,
+    )
+    dois_dias = db.Agendamento(
+        status="ativo",
+        telefone_cliente="5511888888888",
+        nome_cliente="Outro cliente",
+        inicio="2026-11-07T09:00",
+        fim="2026-11-07T10:00",
+        lembretes_enviados=0,
+        lembrete_em_processamento=0,
+    )
+
+    with db._lock, db._session() as s:
+        s.add(amanha)
+        s.add(dois_dias)
+        s.commit()
+
+    encontrados = db.agendamentos_precisando_lembrete(
+        "2026-11-05T08:00", horas_antes=96, stage=0
+    )
+
+    assert encontrados == [amanha]
+    assert dois_dias not in encontrados

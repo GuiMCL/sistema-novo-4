@@ -1500,17 +1500,24 @@ def agendamentos_precisando_lembrete(agora: str, horas_antes: int, stage: int = 
 
     stage=0: primeiro aviso (lembretes_enviados == 0)
     stage=1: segundo aviso (lembretes_enviados == 1)
+
+    O lembrete de confirmação é uma regra de calendário: deve ser enviado no
+    dia anterior ao atendimento. `horas_antes` permanece na assinatura por
+    compatibilidade com chamadas antigas, mas não transforma a regra em uma
+    janela móvel (que faria um atendimento de 09/11 ser lembrado em 05/11 se
+    a configuração estivesse em 96 horas).
     """
-    from datetime import timedelta
-    limite = (datetime.fromisoformat(agora) + timedelta(hours=horas_antes)).isoformat(timespec="minutes")
+    amanha = (datetime.fromisoformat(agora).date() + timedelta(days=1)).isoformat()
+    inicio_amanha = f"{amanha}T00:00"
+    inicio_depois_de_amanha = f"{amanha}T23:59:59"
     with _session() as s:
         return list(
             s.exec(
                 select(Agendamento)
                 .where(
                     Agendamento.status == "ativo",
-                    Agendamento.inicio <= limite,
-                    Agendamento.inicio > agora,
+                    Agendamento.inicio >= inicio_amanha,
+                    Agendamento.inicio <= inicio_depois_de_amanha,
                     Agendamento.lembretes_enviados == stage,
                     Agendamento.lembrete_em_processamento == 0,
                 )

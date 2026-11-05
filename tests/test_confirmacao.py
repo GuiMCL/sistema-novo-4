@@ -89,3 +89,20 @@ def test_resposta_afirmativa_confirma_lembrete_sem_ia(cliente):
 
     assert resposta == "Pronto, seu agendamento foi confirmado."
     assert db.get_agendamento(ag.id).status == "confirmado"
+
+
+def test_resposta_vou_comparecer_confirma_lembrete_sem_ia(cliente):
+    ag = db.criar_agendamento(
+        nome_cliente="Adrieli", telefone_cliente=cliente,
+        inicio="2099-08-18T08:00", fim="2099-08-18T17:00",
+    )
+    with db._lock, db._session() as s:
+        registro = s.get(db.Agendamento, ag.id)
+        registro.aguardando_confirmacao = 1
+        s.add(registro)
+        s.commit()
+
+    resposta = agente._confirmar_lembrete_pendente("Sim, vou comparecer!")
+
+    assert resposta == "Pronto, seu agendamento foi confirmado."
+    assert db.get_agendamento(ag.id).status == "confirmado"

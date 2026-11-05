@@ -462,10 +462,37 @@ def _confirmar_lembrete_pendente(
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
     texto = re.sub(r"[^a-zA-Z0-9]+", " ", texto).strip().lower()
     aceitas = {
-        "sim", "sim confirmo", "sim pode confirmar", "confirmo", "confirmado", "pode confirmar", "confirmar",
-        "ok", "okay", "fechou", "pode ser", "tudo certo", "esta confirmado",
+        # Respostas diretas
+        "sim", "s", "confirmo", "confirmado", "confirmar", "pode confirmar",
+        "sim confirmo", "sim pode confirmar", "sim esta confirmado",
+        "sim esta tudo confirmado", "esta confirmado", "tudo confirmado",
+        # Confirmações coloquiais
+        "ok", "okay", "okey", "ta bom", "certo", "certinho", "fechou",
+        "fechado", "combinado", "combinadissimo", "pode ser", "tudo certo",
+        "por mim tudo certo", "sem problema", "sem problemas", "pode deixar",
+        "deixa comigo", "beleza", "blz", "tranquilo",
+        # Presença no atendimento
+        "sim vou comparecer", "vou comparecer", "vou sim comparecer",
+        "sim estarei la", "estarei la", "estarei ai", "sim estarei presente",
+        "estarei presente", "vou estar presente", "vou estar ai",
+        "irei comparecer", "irei sim", "pode contar comigo",
+        "conto comigo", "estarei no dia", "vou no dia",
+        # Confirmações com intenção de levar o veículo
+        "sim vou", "vou sim", "sim irei", "pode marcar", "pode deixar marcado",
+        "pode deixar agendado", "vou levar sim", "sim vou levar",
+        "estarei ai sim",
     }
-    if texto not in aceitas:
+    padroes_positivos = (
+        r"(?:sim\s+)?vou\s+(?:sim\s+)?comparecer(?:\s+(?:sim|ok))?",
+        r"(?:sim\s+)?(?:vou|irei)\s+(?:estar|comparecer)\s+(?:la|ai|presente)(?:\s+sim)?",
+        r"(?:sim\s+)?estarei\s+(?:la|ai|presente)(?:\s+(?:sim|ok))?",
+        r"(?:sim\s+)?(?:pode|podem)\s+(?:confirmar|deixar\s+(?:confirmado|marcado|agendado))",
+        r"(?:sim\s+)?(?:ta|esta)\s+(?:bom|certo|confirmado|combinado)",
+        r"(?:sim\s+)?(?:vou|irei)\s+levar(?:\s+(?:o\s+carro|sim))?",
+    )
+    if texto not in aceitas and not any(
+        re.fullmatch(padrao, texto) for padrao in padroes_positivos
+    ):
         return None
 
     telefone_efetivo = auth.requester(telefone)
