@@ -187,9 +187,12 @@ async def descrever_imagem(imagem_b64: str, mimetype: str = "image/jpeg", legend
     """Descreve/transcreve uma imagem via chat completions com visão."""
     p = _config("imagem")
     instrucao = (
-        "Descreva o conteúdo desta imagem de forma objetiva, transcrevendo "
-        "qualquer texto visível. A descrição será usada por um atendente "
-        "virtual para entender o que o cliente enviou."
+        "Na PRIMEIRA linha responda exatamente com [COMPRAS] se a imagem "
+        "mostrar peças automotivas, componentes, catálogo, lista de produtos "
+        "ou cotação de fornecedor; caso contrário responda [OUTRA]. "
+        "Na linha seguinte, descreva o conteúdo de forma objetiva, "
+        "transcrevendo qualquer texto visível. A descrição será usada por "
+        "um atendente virtual para entender o que o cliente enviou."
     )
     if legenda:
         instrucao += f"\nLegenda enviada pelo cliente: {legenda}"

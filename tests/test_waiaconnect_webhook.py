@@ -381,6 +381,17 @@ def test_imagem_e_descrita_com_legenda(ia_falsa):
     assert ia_falsa["descrever"][2] == "meu carro"
 
 
+def test_imagem_de_pecas_e_identificada_como_compras(ia_falsa):
+    from app import waiaconnect
+
+    assert waiaconnect.imagem_e_assunto_de_compras(
+        "[Imagem do cliente] [COMPRAS] pastilhas de freio e filtro de oleo"
+    ) is True
+    assert waiaconnect.imagem_e_assunto_de_compras(
+        "[Imagem do cliente] foto de um carro na oficina"
+    ) is False
+
+
 def test_midia_abre_janela_de_24h(ia_falsa):
     body = envelope_midia("audio", {"id": "media_a3"})
     _processa(body)

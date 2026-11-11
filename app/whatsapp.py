@@ -167,6 +167,18 @@ async def _processar_evento_waiaconnect(body: dict) -> None:
         # Sanitiza
         texto = _sanitizar_entrada(texto)
 
+        # Imagens de peças/cotações são assunto comercial, não atendimento de
+        # oficina. Apenas informa o contato, sem usar a ferramenta de
+        # transferência nem transformar a mensagem em novo atendimento.
+        if resultado.get("rotear_compras"):
+            agente.registrar_na_memoria(telefone_norm, texto, "cliente")
+            await enviar_bolhas(
+                remote_jid,
+                "Para assuntos relacionados a peças e compras, fale com o Compras da Revize neste contato: +55 44 8833-6152.\nhttps://wa.me/554488336152",
+            )
+            log.info("Imagem de peças direcionada ao Compras: %s", telefone_norm)
+            return
+
         # Agenda resposta com debounce
         _agendar_lote(telefone_norm, texto)
 

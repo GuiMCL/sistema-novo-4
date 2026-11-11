@@ -12,7 +12,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import re
 import time
+import unicodedata
 import uuid
 from typing import Any
 from urllib.parse import quote
@@ -255,6 +257,13 @@ async def processar_webhook(body: dict) -> dict[str, Any] | None:
             if not texto:
                 texto = await _texto_da_midia(resultado["midia"])
 
+            resultado["rotear_compras"] = bool(
+                (resultado.get("midia") or {}).get("tipo") == "image"
+                and imagem_e_assunto_de_compras(
+                    texto, resultado["midia"].get("legenda", "")
+                )
+            )
+
             registrar_mensagem_inbound(resultado["remote_jid"])
             resultado["texto"] = texto
             log.info(
@@ -346,6 +355,21 @@ async def _texto_da_midia(midia: dict[str, Any] | None) -> str:
 
 def _com_legenda(texto: str, legenda: str) -> str:
     return f"{texto}\nLegenda: {legenda}" if legenda else texto
+
+
+def imagem_e_assunto_de_compras(texto: str, legenda: str = "") -> bool:
+    """Detecta imagem de peças/fornecedor antes de chamar o agente."""
+    bruto = unicodedata.normalize("NFD", f"{texto} {legenda}")
+    bruto = "".join(c for c in bruto if unicodedata.category(c) != "Mn").lower()
+    if "[compras]" in bruto:
+        return True
+    termos = (
+        r"pecas?", r"componente", r"filtro", r"pastilha", r"disco de freio",
+        r"correia", r"rolamento", r"amortecedor", r"bateria", r"pneu",
+        r"vela", r"alternador", r"embreagem", r"radiador", r"cotacao",
+        r"orcamento de pecas", r"catalogo", r"fornecedor", r"estoque",
+    )
+    return any(re.search(rf"\b{termo}\b", bruto) for termo in termos)
 
 
 # Evento cujo data.message é uma mensagem enviada por cliente.
