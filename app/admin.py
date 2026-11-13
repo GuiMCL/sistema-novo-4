@@ -1036,8 +1036,18 @@ def novo_bloqueio(
     fim: str = Form(""),
     motivo: str = Form(""),
 ):
+    try:
+        date.fromisoformat(data)
+        if data_fim:
+            date.fromisoformat(data_fim)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Informe uma data válida.")
     if data_fim and data_fim < data:
         raise HTTPException(status_code=400, detail="Data final anterior à inicial.")
+    if bool(inicio) != bool(fim):
+        raise HTTPException(status_code=400, detail="Informe início e fim do período, ou deixe os dois vazios para fechar o dia inteiro.")
+    if inicio and fim and fim <= inicio:
+        raise HTTPException(status_code=400, detail="O fim do período deve ser depois do início.")
     db.criar_bloqueio(data=data, inicio=inicio or None, fim=fim or None, motivo=motivo, data_fim=data_fim or None)
     return RedirectResponse("/admin", status_code=303)
 

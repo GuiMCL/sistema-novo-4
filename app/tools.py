@@ -57,6 +57,35 @@ def _vagas_ocupadas_em(dia: date, ignorar_telefone: str | None = None) -> int:
     return n
 
 
+def _proxima_data_disponivel(
+    inicio: date,
+    quantidade_dias: int,
+    total_vagas: int,
+    telefone: str | None,
+    agora: datetime,
+) -> dict | None:
+    """Busca a primeira data válida depois de `inicio`, sem sugerir fechamentos."""
+    for deslocamento in range(max(0, quantidade_dias)):
+        dia = inicio + timedelta(days=deslocamento)
+        candidato = dia.isoformat()
+        if not db.pode_agendar_no_dia(dia, agora) or db.dia_bloqueado(dia):
+            continue
+        intervalos = db.horarios_do_dia(dia.weekday())
+        if not intervalos:
+            continue
+        ini = f"{candidato}T{intervalos[0].inicio}"
+        fim = f"{candidato}T{intervalos[-1].fim}"
+        if not db.horario_disponivel(ini, fim, ignorar_telefone=telefone):
+            continue
+        ocupadas = _vagas_ocupadas_em(dia, ignorar_telefone=telefone)
+        return {
+            "data": candidato,
+            "dia_semana": ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")[dia.weekday()],
+            "vagas_livres": max(0, total_vagas - ocupadas),
+        }
+    return None
+
+
 _NOMES_GENERICOS = {
     "cliente", "o cliente", "a cliente", "cliente novo", "novo cliente",
     "sem nome", "desconhecido", "desconhecida", "nome", "usuario", "usuário",
@@ -222,6 +251,9 @@ def consultar_horarios_disponiveis(
         }
 
     if db.dia_bloqueado(dia):
+        proxima = _proxima_data_disponivel(
+            dia + timedelta(days=1), quantidade_dias, total_vagas, tel, agora
+        )
         return {
             "data": data,
             "servico": nome_servico,
@@ -230,7 +262,9 @@ def consultar_horarios_disponiveis(
             "vagas_livres": 0,
             "horarios": [],
             "total_vagas": total_vagas,
-            "aviso": "Sem expediente nesta data (feriado ou dia fechado). Consulte outra data.",
+            "motivo_fechamento": db.motivo_dia_bloqueado(dia),
+            "proxima_data_disponivel": proxima,
+            "aviso": "Sem expediente nesta data (feriado ou dia fechado). Consulte a próxima data disponível.",
         }
 
     agora = _agora_local()

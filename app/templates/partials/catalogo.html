@@ -42,7 +42,7 @@
 
   <!-- ============ BLOQUEIOS ============ -->
   <div class="card">
-    <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Bloqueios</h2><span class="tag">{{ bloqueios|length }}</span></div>
+    <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Dias fechados</h2><span class="tag">{{ bloqueios|length }}</span></div>
     <table class="tbl">
       <thead><tr><th>Data</th><th>Janela</th><th>Motivo</th><th></th></tr></thead>
       <tbody>
@@ -60,22 +60,22 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="empty">Nenhuma data bloqueada.</td></tr>
+        <tr><td colspan="4" class="empty">Nenhum dia fechado cadastrado.</td></tr>
       {% endfor %}
       </tbody>
     </table>
 
     <form method="post" action="/admin/bloqueio" style="margin-top:22px; border-top:2px solid var(--paper-2); padding-top:18px;">
       <div class="row">
-        <div><label>Data</label><input name="data" type="date" required></div>
-        <div><label>Data final <span style="text-transform:none;font-weight:400">(vazio = um dia)</span></label><input name="data_fim" type="date"></div>
+        <div><label>Dia fechado</label><input name="data" type="date" required></div>
+        <div><label>Até <span style="text-transform:none;font-weight:400">(opcional)</span></label><input name="data_fim" type="date"></div>
       </div>
       <div class="row">
         <div><label>Início <span style="text-transform:none;font-weight:400">(vazio = dia todo)</span></label><input name="inicio" type="time"></div>
         <div><label>Fim</label><input name="fim" type="time"></div>
       </div>
-      <label>Motivo</label><input name="motivo" placeholder="Folga, feriado…">
-      <button class="btn-primary">+ Bloquear</button>
+      <label>Motivo</label><input name="motivo" placeholder="Ex.: feriado municipal">
+      <button class="btn-primary">+ Fechar dia</button>
     </form>
   </div>
 </div>

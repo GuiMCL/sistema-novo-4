@@ -1036,6 +1036,16 @@ def dia_bloqueado(dia: date) -> bool:
     return False
 
 
+def motivo_dia_bloqueado(dia: date) -> str:
+    """Retorna o motivo do primeiro fechamento de dia inteiro que cobre `dia`."""
+    d = dia.isoformat()
+    with _session() as s:
+        for b in s.exec(select(Bloqueio).where(Bloqueio.data <= d)).all():
+            if (b.data_fim or b.data) >= d and b.inicio is None:
+                return b.motivo or "Dia fechado"
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Agendamentos
 # ---------------------------------------------------------------------------

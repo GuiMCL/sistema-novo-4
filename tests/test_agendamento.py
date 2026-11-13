@@ -66,6 +66,14 @@ def test_disponibilidade_com_data_futura_marca_pode_agendar_true(seg_18h):
     assert r["pode_agendar"] is True
 
 
+def test_dia_fechado_retorna_motivo_e_proxima_data(seg_18h):
+    db.criar_bloqueio("2026-08-18", None, None, "Feriado municipal")
+    r = tools.consultar_horarios_disponiveis(data="2026-08-18")
+    assert r["pode_agendar"] is False
+    assert r["motivo_fechamento"] == "Feriado municipal"
+    assert r["proxima_data_disponivel"]["data"] == "2026-08-19"
+
+
 def test_agendar_hoje_depois_do_fechamento_rejeita(seg_18h, cliente):
     servico = criar_servico()
     r = tools.agendar(
