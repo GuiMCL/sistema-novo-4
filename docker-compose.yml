@@ -21,6 +21,10 @@ services:
       WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-es}
       # whsec_... do endpoint. Vazio = valida só o token estático.
       WAIACONNECT_WEBHOOK_SECRET: ${WAIACONNECT_WEBHOOK_SECRET:-}
+      # n8n-meta-ads (URL base, sem /webhook)
+      N8N_ADS_BASE_URL: ${N8N_ADS_BASE_URL:-https://n8n.revizeautocenter.shop}
+      N8N_ADS_SECRET: ${N8N_ADS_SECRET:-revize-ads-2026-segredo}
+      N8N_WAIA_SECRET: ${N8N_WAIA_SECRET:-revize-ads-2026-segredo}
     volumes:
       - mcp_data:/data
 

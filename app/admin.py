@@ -342,7 +342,15 @@ def pagina_ads(request: Request, _: str = Depends(autenticar_pagina)):
             contatos_item = json.loads(item.contatos_json or "[]")
         except json.JSONDecodeError:
             contatos_item = []
-        historico.append({"item": item, "contatos": contatos_item})
+        try:
+            copy_item = json.loads(item.copy_json or "{}")
+        except json.JSONDecodeError:
+            copy_item = {}
+        try:
+            meta_item = json.loads(item.meta_json or "{}")
+        except json.JSONDecodeError:
+            meta_item = {}
+        historico.append({"item": item, "contatos": contatos_item, "copy": copy_item, "meta": meta_item})
     return templates.TemplateResponse(
         request,
         "admin_ads.html",
@@ -365,21 +373,30 @@ async def ads_briefing(
     orcamento_diario: float = Form(...), publico: str = Form(""), cidade: str = Form("Brasil"),
     pagina_id: str = Form(""), instagram_actor_id: str = Form(""), conta: str = Form(""),
 ):
+    client_request_id = f"painel-{secrets.token_hex(8)}"
     payload = {
         "nome": nome.strip(), "produto": produto.strip(), "url": url.strip(),
         "orcamento_diario": orcamento_diario, "publico": publico.strip(),
         "cidade": cidade.strip() or "Brasil", "pagina_id": pagina_id.strip(),
         "instagram_actor_id": instagram_actor_id.strip(), "conta": conta.strip(),
+        "client_request_id": client_request_id,
     }
+    registro = db.criar_ads_disparo(
+        tipo="briefing", nome=payload["nome"], produto=payload["produto"],
+        status="processando", etapa="recebido", external_id=client_request_id,
+        payload_json=json.dumps(payload, ensure_ascii=False),
+        criado_em=_agora_local().isoformat(timespec="seconds"),
+    )
     try:
         resposta = await _ads_post("ai-ads/briefing", payload, settings.n8n_ads_secret)
-        db.criar_ads_disparo(
-            tipo="briefing", nome=payload["nome"], produto=payload["produto"],
-            contatos_total=0, payload_json=json.dumps(payload, ensure_ascii=False),
-            resposta=json.dumps(resposta, ensure_ascii=False), criado_em=_agora_local().isoformat(timespec="seconds"),
+        db.atualizar_ads_disparo(
+            client_request_id, status="processando", etapa="recebido",
+            resposta=json.dumps(resposta, ensure_ascii=False),
+            atualizado_em=_agora_local().isoformat(timespec="seconds"),
         )
         return _ads_redirect(ok="Briefing enviado ao n8n.")
     except Exception as e:
+        db.atualizar_ads_disparo(client_request_id, status="erro", etapa="erro", resposta=str(e), atualizado_em=_agora_local().isoformat(timespec="seconds"))
         return _ads_redirect(erro=str(e))
 
 
@@ -432,6 +449,38 @@ async def ads_acao(
         return _ads_redirect(ok=f"Ação {acao} enviada ao n8n.")
     except Exception as e:
         return _ads_redirect(erro=str(e))
+
+
+@router.post("/admin/ads/callback")
+async def ads_callback(request: Request):
+    """Recebe atualizações assinadas do workflow n8n, sem sessão de painel."""
+    segredo = request.headers.get("x-ads-callback-secret", "")
+    if not segredo or segredo != settings.n8n_ads_secret:
+        raise HTTPException(status_code=401, detail="Callback Ads não autorizado.")
+    body = await request.json()
+    external_id = str(body.get("client_request_id") or "").strip()
+    if not external_id:
+        raise HTTPException(status_code=400, detail="client_request_id ausente.")
+    etapa = str(body.get("etapa") or "recebido").strip().lower()
+    status = str(body.get("status") or "processando").strip().lower()
+    permitidas = {"recebido", "validado", "copy_gerada", "imagem_gerada", "rascunho_salvo", "aguardando_aprovacao", "campanha_criada", "ativo", "erro"}
+    if etapa not in permitidas:
+        etapa = "processando"
+    campos = {
+        "etapa": etapa, "status": "erro" if status == "erro" else "processando",
+        "resposta": json.dumps(body, ensure_ascii=False),
+        "atualizado_em": _agora_local().isoformat(timespec="seconds"),
+    }
+    if body.get("copy") is not None:
+        campos["copy_json"] = json.dumps(body["copy"], ensure_ascii=False)
+    if body.get("image_b64"):
+        campos["image_b64"] = str(body["image_b64"])
+    if body.get("meta") is not None:
+        campos["meta_json"] = json.dumps(body["meta"], ensure_ascii=False)
+    item = db.atualizar_ads_disparo(external_id, **campos)
+    if not item:
+        raise HTTPException(status_code=404, detail="Briefing não encontrado.")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

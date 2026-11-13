@@ -281,6 +281,12 @@ class AdsDisparo(SQLModel, table=True):
     payload_json: str = "{}"
     resposta: str = ""
     criado_em: str = ""
+    external_id: str = ""
+    etapa: str = "recebido"
+    copy_json: str = "{}"
+    image_b64: str = ""
+    meta_json: str = "{}"
+    atualizado_em: str = ""
 
 
 class Agendamento(SQLModel, table=True):
@@ -451,6 +457,19 @@ def _migrar() -> None:
                     conn.exec_driver_sql(
                         f"ALTER TABLE lembreteconfig ADD COLUMN {col} {tipo}"
                     )
+            conn.commit()
+        cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(adsdisparo)")}
+        if cols:
+            for col, tipo in [
+                ("external_id", "VARCHAR NOT NULL DEFAULT ''"),
+                ("etapa", "VARCHAR NOT NULL DEFAULT 'recebido'"),
+                ("copy_json", "VARCHAR NOT NULL DEFAULT '{}'"),
+                ("image_b64", "VARCHAR NOT NULL DEFAULT ''"),
+                ("meta_json", "VARCHAR NOT NULL DEFAULT '{}'"),
+                ("atualizado_em", "VARCHAR NOT NULL DEFAULT ''"),
+            ]:
+                if col not in cols:
+                    conn.exec_driver_sql(f"ALTER TABLE adsdisparo ADD COLUMN {col} {tipo}")
             conn.commit()
 
 
@@ -960,6 +979,20 @@ def listar_ads_disparos(limite: int = 50) -> list[AdsDisparo]:
     with _session() as s:
         stmt = select(AdsDisparo).order_by(AdsDisparo.id.desc()).limit(limite)
         return list(s.exec(stmt).all())
+
+
+def atualizar_ads_disparo(external_id: str, **campos) -> AdsDisparo | None:
+    with _lock, _session() as s:
+        stmt = select(AdsDisparo).where(AdsDisparo.external_id == external_id)
+        item = s.exec(stmt).first()
+        if not item:
+            return None
+        for chave, valor in campos.items():
+            if hasattr(item, chave):
+                setattr(item, chave, valor)
+        s.add(item)
+        s.commit()
+        return item
 
 
 # ---------------------------------------------------------------------------
