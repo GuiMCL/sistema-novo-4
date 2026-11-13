@@ -739,6 +739,8 @@ def agenda_slots(data: str, servico_id: int | None = None, _: str = Depends(aute
         dia = date.fromisoformat(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+    if db.feriado_nacional(dia):
+        return {"slots": [], "fechado": True, "motivo": db.feriado_nacional(dia)}
     intervalos = db.horarios_do_dia(dia.weekday())
     if not intervalos:
         return {"slots": [], "fechado": True}
@@ -806,6 +808,8 @@ def novo_agendamento(
         raise HTTPException(status_code=400, detail="Não é possível agendar no dia atual. A primeira data permitida é amanhã.")
     if dia.weekday() == db.DIA_FECHADO_SABADO:
         raise HTTPException(status_code=400, detail="A empresa não realiza agendamentos aos sábados.")
+    if db.feriado_nacional(dia):
+        raise HTTPException(status_code=400, detail=f"Sem expediente: feriado nacional ({db.feriado_nacional(dia)}).")
     if db.dia_bloqueado(dia):
         raise HTTPException(status_code=400, detail="Sem expediente nesta data (feriado ou dia fechado).")
     horarios = db.horarios_do_dia(dia.weekday())
@@ -894,6 +898,8 @@ def reagendar_agendamento(
         ))
     if dia.weekday() == db.DIA_FECHADO_SABADO:
         raise HTTPException(status_code=400, detail="A empresa não realiza agendamentos aos sábados.")
+    if db.feriado_nacional(dia):
+        raise HTTPException(status_code=400, detail=f"Sem expediente: feriado nacional ({db.feriado_nacional(dia)}).")
     horarios = db.horarios_do_dia(dia.weekday())
     if not horarios:
         raise HTTPException(status_code=400, detail="Sem expediente nesta data.")

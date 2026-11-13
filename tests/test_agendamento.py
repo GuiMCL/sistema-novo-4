@@ -74,6 +74,14 @@ def test_dia_fechado_retorna_motivo_e_proxima_data(seg_18h):
     assert r["proxima_data_disponivel"]["data"] == "2026-08-19"
 
 
+def test_feriado_nacional_nao_e_oferecido(monkeypatch):
+    monkeypatch.setattr(tools, "_agora_local", lambda: datetime(2026, 11, 19, 10, 0))
+    r = tools.consultar_horarios_disponiveis(data="2026-11-20")
+    assert r["pode_agendar"] is False
+    assert "Consciência Negra" in r["motivo_fechamento"]
+    assert r["proxima_data_disponivel"]["data"] == "2026-11-23"
+
+
 def test_agendar_hoje_depois_do_fechamento_rejeita(seg_18h, cliente):
     servico = criar_servico()
     r = tools.agendar(

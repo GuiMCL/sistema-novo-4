@@ -250,6 +250,24 @@ def consultar_horarios_disponiveis(
             "aviso": "A empresa não realiza agendamentos aos sábados. Consulte outra data.",
         }
 
+    feriado = db.feriado_nacional(dia)
+    if feriado:
+        proxima = _proxima_data_disponivel(
+            dia + timedelta(days=1), quantidade_dias, total_vagas, tel, agora
+        )
+        return {
+            "data": data,
+            "servico": nome_servico,
+            "dia_livre": False,
+            "pode_agendar": False,
+            "vagas_livres": 0,
+            "horarios": [],
+            "total_vagas": total_vagas,
+            "motivo_fechamento": feriado,
+            "proxima_data_disponivel": proxima,
+            "aviso": "Sem expediente nesta data: feriado nacional. Consulte a próxima data disponível.",
+        }
+
     if db.dia_bloqueado(dia):
         proxima = _proxima_data_disponivel(
             dia + timedelta(days=1), quantidade_dias, total_vagas, tel, agora

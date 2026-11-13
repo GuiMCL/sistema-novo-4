@@ -32,6 +32,25 @@ STATUS_VIGENTES = ("ativo", "confirmado")
 # tenha cadastrado intervalos nesse dia pela grade do painel.
 DIA_FECHADO_SABADO = 5  # datetime.weekday(): segunda=0 ... sábado=5
 
+# Feriados nacionais civis/religiosos previstos em lei. Feriados estaduais,
+# municipais e pontos facultativos continuam sendo cadastrados no painel.
+FERIADOS_NACIONAIS_FIXOS = {
+    (1, 1): "Confraternização Universal",
+    (4, 21): "Tiradentes",
+    (5, 1): "Dia Mundial do Trabalho",
+    (9, 7): "Independência do Brasil",
+    (10, 12): "Nossa Senhora Aparecida",
+    (11, 2): "Finados",
+    (11, 15): "Proclamação da República",
+    (11, 20): "Dia Nacional de Zumbi e da Consciência Negra",
+    (12, 25): "Natal",
+}
+
+
+def feriado_nacional(dia: date) -> str:
+    """Nome do feriado nacional em `dia`, ou string vazia quando não há."""
+    return FERIADOS_NACIONAIS_FIXOS.get((dia.month, dia.day), "")
+
 
 def agendamento_em_vigencia(agendamento: "Agendamento", agora: datetime | None = None) -> bool:
     """Indica se um agendamento ainda deve ser considerado pela IA.
@@ -528,6 +547,8 @@ def pode_agendar_no_dia(dia: date, agora: datetime | None = None) -> bool:
     (mesma convenção do restante do sistema).
     """
     if dia.weekday() == DIA_FECHADO_SABADO:
+        return False
+    if feriado_nacional(dia):
         return False
     if agora is None:
         agora = _agora_local_db()
