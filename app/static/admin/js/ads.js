@@ -10,9 +10,3 @@ document.getElementById('ads-todos')?.addEventListener('click', (event) => {
 });
 updateCount();
 
-// Enquanto o n8n ainda está trabalhando, atualiza a linha do tempo sem exigir
-// que o atendente dê refresh manual.
-const historico = document.querySelector('.ads-history');
-if (historico && /processando|recebido pelo n8n/.test(historico.textContent)) {
-  window.setTimeout(() => window.location.reload(), 8000);
-}
