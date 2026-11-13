@@ -305,7 +305,9 @@ def pagina_config(request: Request, _: str = Depends(autenticar_pagina)):
 
 
 def _ads_url(path: str) -> str:
-    base = settings.n8n_ads_base_url
+    base = settings.n8n_ads_base_url.replace(
+        "http://n8n.revizeautocenter.shop", "https://n8n.revizeautocenter.shop"
+    )
     if not base:
         raise RuntimeError("Configure N8N_ADS_BASE_URL no ambiente do painel.")
     return f"{base}/webhook/{path.lstrip('/')}"
@@ -314,13 +316,13 @@ def _ads_url(path: str) -> str:
 async def _ads_post(path: str, payload: dict, secret: str) -> dict:
     if not secret:
         raise RuntimeError("Configure o segredo do webhook n8n no ambiente do painel.")
-    async with httpx.AsyncClient(timeout=45) as client:
+    async with httpx.AsyncClient(timeout=45, follow_redirects=True) as client:
         response = await client.post(
             _ads_url(path),
             json=payload,
             headers={"X-Ads-Secret": secret, "X-Waia-Secret": secret},
         )
-    if response.status_code >= 400:
+    if not 200 <= response.status_code < 300:
         raise RuntimeError(f"n8n recusou a solicitação ({response.status_code}).")
     try:
         return response.json()
