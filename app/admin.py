@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import calendar
 import asyncio
+import json
 import logging
 import re
 import secrets
@@ -19,6 +20,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
+import httpx
+from urllib.parse import quote
 
 from . import agente, auth, db, ia, tarefas, waiaconnect, whatsapp
 from .config import settings
@@ -294,6 +297,141 @@ def pagina_config(request: Request, _: str = Depends(autenticar_pagina)):
             **_contexto_base(),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Ads / n8n
+# ---------------------------------------------------------------------------
+
+
+def _ads_url(path: str) -> str:
+    base = settings.n8n_ads_base_url
+    if not base:
+        raise RuntimeError("Configure N8N_ADS_BASE_URL no ambiente do painel.")
+    return f"{base}/webhook/{path.lstrip('/')}"
+
+
+async def _ads_post(path: str, payload: dict, secret: str) -> dict:
+    if not secret:
+        raise RuntimeError("Configure o segredo do webhook n8n no ambiente do painel.")
+    async with httpx.AsyncClient(timeout=45) as client:
+        response = await client.post(
+            _ads_url(path),
+            json=payload,
+            headers={"X-Ads-Secret": secret, "X-Waia-Secret": secret},
+        )
+    if response.status_code >= 400:
+        raise RuntimeError(f"n8n recusou a solicitação ({response.status_code}).")
+    try:
+        return response.json()
+    except ValueError:
+        return {"status_code": response.status_code}
+
+
+def _ads_redirect(ok: str = "", erro: str = ""):
+    query = f"?{('ok=' + quote(ok)) if ok else ('erro=' + quote(erro))}"
+    return RedirectResponse("/admin/ads" + query, status_code=303)
+
+
+@router.get("/admin/ads", response_class=HTMLResponse)
+def pagina_ads(request: Request, _: str = Depends(autenticar_pagina)):
+    contatos = sorted(db.listar_clientes(), key=lambda c: (c.nome or "", c.telefone))
+    historico = []
+    for item in db.listar_ads_disparos():
+        try:
+            contatos_item = json.loads(item.contatos_json or "[]")
+        except json.JSONDecodeError:
+            contatos_item = []
+        historico.append({"item": item, "contatos": contatos_item})
+    return templates.TemplateResponse(
+        request,
+        "admin_ads.html",
+        {
+            "active_page": "ads",
+            "contatos": contatos,
+            "historico": historico,
+            "ok": request.query_params.get("ok", ""),
+            "erro": request.query_params.get("erro", ""),
+            "ads_configurado": bool(settings.n8n_ads_base_url and settings.n8n_ads_secret and settings.n8n_waia_secret),
+            **_contexto_base(),
+        },
+    )
+
+
+@router.post("/admin/ads/briefing")
+async def ads_briefing(
+    _: db.Usuario = Depends(auth.admin_required),
+    nome: str = Form(...), produto: str = Form(...), url: str = Form(...),
+    orcamento_diario: float = Form(...), publico: str = Form(""), cidade: str = Form("Brasil"),
+    pagina_id: str = Form(""), instagram_actor_id: str = Form(""), conta: str = Form(""),
+):
+    payload = {
+        "nome": nome.strip(), "produto": produto.strip(), "url": url.strip(),
+        "orcamento_diario": orcamento_diario, "publico": publico.strip(),
+        "cidade": cidade.strip() or "Brasil", "pagina_id": pagina_id.strip(),
+        "instagram_actor_id": instagram_actor_id.strip(), "conta": conta.strip(),
+    }
+    try:
+        resposta = await _ads_post("ai-ads/briefing", payload, settings.n8n_ads_secret)
+        db.criar_ads_disparo(
+            tipo="briefing", nome=payload["nome"], produto=payload["produto"],
+            contatos_total=0, payload_json=json.dumps(payload, ensure_ascii=False),
+            resposta=json.dumps(resposta, ensure_ascii=False), criado_em=_agora_local().isoformat(timespec="seconds"),
+        )
+        return _ads_redirect(ok="Briefing enviado ao n8n.")
+    except Exception as e:
+        return _ads_redirect(erro=str(e))
+
+
+@router.post("/admin/ads/promocao")
+async def ads_promocao(
+    _: db.Usuario = Depends(auth.admin_required),
+    produto: str = Form(...), oferta: str = Form(...), detalhes: str = Form(""),
+    url: str = Form(""), imagem_url: str = Form(""), contatos: list[str] = Form([]),
+):
+    mapa = {c.telefone: c for c in db.listar_clientes()}
+    selecionados = [mapa[t] for t in contatos if t in mapa]
+    if not selecionados:
+        return _ads_redirect(erro="Selecione pelo menos um contato.")
+    lista = [{"nome": c.nome or "cliente", "telefone": c.telefone} for c in selecionados]
+    payload = {
+        "produto": produto.strip(), "oferta": oferta.strip(), "detalhes": detalhes.strip(),
+        "url": url.strip(), "imagem_url": imagem_url.strip(), "contatos": lista,
+    }
+    try:
+        resposta = await _ads_post("waia/promocao", payload, settings.n8n_waia_secret)
+        db.criar_ads_disparo(
+            tipo="promocao", nome=oferta.strip(), produto=produto.strip(),
+            contatos_total=len(lista), contatos_json=json.dumps(lista, ensure_ascii=False),
+            payload_json=json.dumps(payload, ensure_ascii=False),
+            resposta=json.dumps(resposta, ensure_ascii=False), criado_em=_agora_local().isoformat(timespec="seconds"),
+        )
+        return _ads_redirect(ok=f"Disparo enviado para {len(lista)} contatos.")
+    except Exception as e:
+        db.criar_ads_disparo(
+            tipo="promocao", nome=oferta.strip(), produto=produto.strip(), status="erro",
+            contatos_total=len(lista), contatos_json=json.dumps(lista, ensure_ascii=False),
+            payload_json=json.dumps(payload, ensure_ascii=False), resposta=str(e),
+            criado_em=_agora_local().isoformat(timespec="seconds"),
+        )
+        return _ads_redirect(erro=str(e))
+
+
+@router.post("/admin/ads/acao")
+async def ads_acao(
+    _: db.Usuario = Depends(auth.admin_required),
+    acao: str = Form(...), id: str = Form(...),
+):
+    if acao not in {"aprovar", "ativar"}:
+        return _ads_redirect(erro="Ação de Ads inválida.")
+    path = "ai-ads/approve" if acao == "aprovar" else "ai-ads/activate"
+    payload = {"id": id.strip(), "aprovar": True} if acao == "aprovar" else {"id": id.strip(), "ativar": True}
+    try:
+        resposta = await _ads_post(path, payload, settings.n8n_ads_secret)
+        db.criar_ads_disparo(tipo=acao, nome=id.strip(), payload_json=json.dumps(payload), resposta=json.dumps(resposta), criado_em=_agora_local().isoformat(timespec="seconds"))
+        return _ads_redirect(ok=f"Ação {acao} enviada ao n8n.")
+    except Exception as e:
+        return _ads_redirect(erro=str(e))
 
 
 # ---------------------------------------------------------------------------

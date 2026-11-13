@@ -269,6 +269,20 @@ class LembreteConfig(SQLModel, table=True):
     timeout_horas: int = 6
 
 
+class AdsDisparo(SQLModel, table=True):
+    """Registro local das solicitações enviadas ao workflow de Ads do n8n."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tipo: str = "promocao"  # promocao | briefing | aprovacao | ativacao
+    nome: str = ""
+    produto: str = ""
+    status: str = "enfileirado"  # enfileirado | erro (recebido pelo n8n)
+    contatos_total: int = 0
+    contatos_json: str = "[]"
+    payload_json: str = "{}"
+    resposta: str = ""
+    criado_em: str = ""
+
+
 class Agendamento(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     # Vínculo com o catálogo (Servico). Pode ser None quando o serviço foi
@@ -932,6 +946,20 @@ def cliente_pausado(telefone: str) -> bool:
     """True se o bot está pausado para este contato."""
     c = get_cliente(telefone)
     return bool(c and c.bot_pausado)
+
+
+def criar_ads_disparo(**campos) -> AdsDisparo:
+    with _lock, _session() as s:
+        item = AdsDisparo(**campos)
+        s.add(item)
+        s.commit()
+        return item
+
+
+def listar_ads_disparos(limite: int = 50) -> list[AdsDisparo]:
+    with _session() as s:
+        stmt = select(AdsDisparo).order_by(AdsDisparo.id.desc()).limit(limite)
+        return list(s.exec(stmt).all())
 
 
 # ---------------------------------------------------------------------------

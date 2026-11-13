@@ -1,0 +1,54 @@
+{% extends "admin_base.html" %}
+{% block title %}Ads{% endblock %}
+{% block heading %}Ads & disparos{% endblock %}
+{% block content %}
+  {% if ok %}<div class="ads-alert ads-ok">{{ ok }}</div>{% endif %}
+  {% if erro %}<div class="ads-alert ads-error">{{ erro }}</div>{% endif %}
+
+  <div class="ads-intro">
+    <div><p class="ads-kicker">AUTOMAÇÃO N8N</p><h2>Campanhas que saem do briefing e chegam no contato.</h2><p>Crie o anúncio no fluxo do n8n, prepare uma promoção e acompanhe exatamente para quem cada disparo foi solicitado.</p></div>
+    <div class="ads-status"><span class="ads-dot {{ 'ads-dot-off' if not ads_configurado else '' }}"></span><span>{{ contatos|length }} contatos conhecidos · {{ 'n8n conectado' if ads_configurado else 'configure o n8n no ambiente' }}</span></div>
+  </div>
+
+  <div class="ads-grid">
+    <section class="card ads-card">
+      <div class="card-head"><h2>Novo anúncio</h2><span class="tag">IA + Meta</span></div>
+      <p class="meta">O n8n gera copy e imagem e salva o rascunho para aprovação.</p>
+      <form method="post" action="/admin/ads/briefing" class="ads-form">
+        <label>Nome da campanha<input name="nome" required placeholder="Ex.: Revisão de férias"></label>
+        <label>Produto ou serviço<input name="produto" required placeholder="Ex.: Revisão completa"></label>
+        <label>URL de destino<input name="url" type="url" required placeholder="https://..." pattern="https://.*"></label>
+        <div class="ads-form-row"><label>Orçamento diário<input name="orcamento_diario" type="number" min="10" max="1000" step="0.01" required placeholder="50"></label><label>Cidade<input name="cidade" value="Brasil"></label></div>
+        <label>Público<input name="publico" placeholder="adultos interessados em manutenção automotiva"></label>
+        <details><summary>IDs Meta (opcional se já estão no n8n)</summary><div class="ads-form-row"><label>Conta<input name="conta" placeholder="act_123..."></label><label>Página<input name="pagina_id"></label></div><label>Instagram actor ID<input name="instagram_actor_id"></label></details>
+        <button class="btn-primary" type="submit">Enviar briefing ao n8n</button>
+      </form>
+    </section>
+
+    <section class="card ads-card">
+      <div class="card-head"><h2>Disparar promoção</h2><span class="tag">WhatsApp</span></div>
+      <p class="meta">A IA cria a mensagem e o n8n envia para os contatos selecionados.</p>
+      <form method="post" action="/admin/ads/promocao" class="ads-form">
+        <label>Produto ou serviço<input name="produto" required placeholder="Ex.: Troca de óleo"></label>
+        <label>Oferta<input name="oferta" required placeholder="Ex.: 15% de desconto nesta semana"></label>
+        <label>Detalhes<textarea name="detalhes" rows="2" placeholder="Condições, prazo, diferenciais..."></textarea></label>
+        <div class="ads-form-row"><label>URL (opcional)<input name="url" type="url" placeholder="https://..."></label><label>Imagem (opcional)<input name="imagem_url" type="url" placeholder="https://..."></label></div>
+        <div class="ads-select-head"><strong>Contatos</strong><span id="ads-contagem">0 selecionados</span><button type="button" class="btn-sm btn-ghost" id="ads-todos">Selecionar todos</button></div>
+        <div class="ads-contacts">
+          {% for c in contatos %}<label class="ads-contact"><input type="checkbox" name="contatos" value="{{ c.telefone }}"><span><b>{{ c.nome or 'Sem nome' }}</b><small>{{ c.telefone }}</small></span></label>{% else %}<p class="empty">Nenhum contato conhecido ainda.</p>{% endfor %}
+        </div>
+        <button class="btn-primary" type="submit" {% if not contatos %}disabled{% endif %}>Enviar promoção</button>
+      </form>
+    </section>
+  </div>
+
+  <section class="card ads-card">
+    <div class="card-head"><h2>Histórico</h2><span class="tag">{{ historico|length }} registros</span></div>
+    <table class="tbl ads-history"><thead><tr><th>Quando</th><th>Tipo</th><th>Campanha / oferta</th><th>Contatos</th><th>Status</th></tr></thead><tbody>
+    {% for h in historico %}{% set item = h.item %}<tr><td class="meta">{{ item.criado_em|replace('T',' ') }}</td><td><span class="pill {{ 'on' if item.status == 'enfileirado' else 'off' }}">{{ item.tipo }}</span></td><td><b>{{ item.nome }}</b><div class="meta">{{ item.produto }}</div></td><td>{% if h.contatos %}<details class="ads-history-contacts"><summary>{{ item.contatos_total }} contatos</summary>{% for c in h.contatos %}<div>{{ c.nome }} <small>{{ c.telefone }}</small></div>{% endfor %}</details>{% else %}—{% endif %}</td><td>{{ 'recebido pelo n8n' if item.status == 'enfileirado' else item.status }}</td></tr>{% else %}<tr><td colspan="5" class="empty">Nenhum disparo feito ainda.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+
+  <section class="card ads-card ads-actions"><div class="card-head"><h2>Ações do rascunho</h2><span class="tag">se necessário</span></div><p class="meta">Depois que o n8n gerar um ID no rascunho, use aqui para aprovar ou ativar a campanha na Meta.</p><form method="post" action="/admin/ads/acao" class="ads-action-form"><input name="id" placeholder="ads-123456" pattern="ads-[0-9]+" required><button class="btn-sm btn-ghost" name="acao" value="aprovar">Aprovar</button><button class="btn-sm btn-primary" name="acao" value="ativar">Ativar</button></form></section>
+{% endblock %}
+{% block extra_scripts %}<script src="/static/admin/js/ads.js"></script>{% endblock %}

@@ -37,6 +37,11 @@ class Settings:
     # na criação do endpoint). Vazio = não valida assinatura, só o token estático.
     waiaconnect_webhook_secret: str = os.getenv("WAIACONNECT_WEBHOOK_SECRET", "")
 
+    # Automação de campanhas e promoções via n8n-meta-ads.
+    n8n_ads_base_url: str = os.getenv("N8N_ADS_BASE_URL", "").rstrip("/")
+    n8n_ads_secret: str = os.getenv("N8N_ADS_SECRET", "")
+    n8n_waia_secret: str = os.getenv("N8N_WAIA_SECRET", "")
+
     # Template aprovado para confirmações/lembretes de agendamento. O modelo
     # deve ter três variáveis no corpo: nome, serviço e data, nessa ordem.
     whatsapp_appointment_template: str = os.getenv(
