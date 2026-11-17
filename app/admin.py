@@ -9,7 +9,6 @@ Autenticação:
 from __future__ import annotations
 
 import calendar
-import asyncio
 import json
 import logging
 import re
@@ -23,7 +22,7 @@ from fastapi.templating import Jinja2Templates
 import httpx
 from urllib.parse import quote
 
-from . import agente, auth, db, ia, tarefas, waiaconnect, whatsapp
+from . import agente, auth, db, ia, tarefas, waiaconnect
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import _agora_local
@@ -1024,24 +1023,8 @@ def novo_agendamento(
     if not ag:
         raise HTTPException(status_code=409, detail="Sem vagas disponíveis nesta data.")
 
-    # Confirmação do agendamento manual com as variáveis do template Meta:
-    # {{1}} nome, {{2}} serviço/descrição, {{3}} data.
-    nome_servico = db.nome_servico(ag) or descricao.strip() or "atendimento"
-    data_formatada = dt_inicio.strftime("%d/%m/%Y")
-    try:
-        asyncio.run(
-            whatsapp.enviar_template_agendamento(
-                ag.telefone_cliente, ag.nome_cliente, nome_servico, data_formatada,
-                segundo_estagio=True,
-            )
-        )
-        # A confirmaÃ§Ã£o manual jÃ¡ Ã© o lembrete final; o worker nÃ£o deve
-        # disparar novamente os estÃ¡gios automÃ¡ticos deste agendamento.
-        db.registrar_lembrete_manual(ag.id, datetime.now().isoformat(timespec="seconds"))
-    except Exception:
-        # O agendamento já foi gravado; falha de template não deve desfazer a
-        # operação. O erro fica registrado para correção no Meta/WaiaConnect.
-        log.exception("Falha enviando confirmação do agendamento manual #%s", ag.id)
+    # O painel não envia a confirmação imediatamente. O worker de lembretes
+    # encontra o agendamento ainda pendente e envia o pedido 24h antes.
     return RedirectResponse("/admin", status_code=303)
 
 
