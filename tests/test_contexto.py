@@ -74,3 +74,11 @@ def test_system_prompt_preserva_confirmacao_de_data_e_responde_horario():
     assert "Uma pergunta posterior não desfaz uma confirmação anterior" in prompt
     assert "não há horário individual" in prompt
     assert "NUNCA responda repetindo \"qual dia?\"" in prompt
+
+
+def test_system_prompt_orienta_avaliacao_antes_de_informar_valores():
+    prompt = agente._system_prompt()
+
+    assert "nao informe nem confirme um valor exato" in prompt
+    assert "apos a avaliacao e elaboracao do orcamento" in prompt
+    assert "sugira agendar o veiculo" in prompt

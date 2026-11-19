@@ -341,9 +341,27 @@ def _system_prompt() -> str:
     # Remetente vem do contextvar (setado no pipeline antes do run) — mesmo
     # critério usado p/ montar o toolset em `responder`.
     geral, mcp = prompt_atual(auth.eh_dono())
-    partes = [prefixo, POLITICA_EMPRESA_OBRIGATORIA, _contexto_cliente(), geral.strip()]
+    politica_valores = (
+        "## Regra obrigatoria sobre valores\n"
+        "- Quando o cliente perguntar o valor de uma peca, de um servico ou da mao de obra, "
+        "nao informe nem confirme um valor exato. Explique que o valor exato so pode ser "
+        "informado apos a avaliacao e elaboracao do orcamento do veiculo.\n"
+        "- Em seguida, sugira agendar o veiculo para avaliar o servico ou problema que o "
+        "cliente relatou anteriormente.\n"
+        "- Essa regra prevalece sobre qualquer valor exibido no catalogo de servicos. "
+        "Nao use valores do catalogo como preco final ou estimativa para o cliente."
+    )
+    partes = [
+        prefixo,
+        POLITICA_EMPRESA_OBRIGATORIA,
+        _contexto_cliente(),
+        geral.strip(),
+    ]
     if mcp.strip():
         partes.append(mcp.strip())
+    # Regra deliberadamente no fim: prevalece sobre prompts personalizados e
+    # sobre a instrução genérica de exibir valores do catálogo.
+    partes.append(politica_valores)
     return "\n\n".join(p for p in partes if p)
 
 
